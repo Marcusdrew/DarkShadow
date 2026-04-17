@@ -32,7 +32,10 @@ export function toHex(buf: ArrayBuffer | Uint8Array): string {
 }
 
 export async function sha256(input: string | Uint8Array): Promise<Uint8Array> {
-  const data = typeof input === "string" ? enc.encode(input) : input;
+  const data: BufferSource =
+    typeof input === "string"
+      ? enc.encode(input)
+      : (input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength) as ArrayBuffer);
   const hash = await crypto.subtle.digest("SHA-256", data);
   return new Uint8Array(hash);
 }
@@ -104,7 +107,7 @@ export async function generateIdentity(): Promise<{
   );
   const raw = await crypto.subtle.exportKey("raw", kp.publicKey);
   const pubkeyB64 = toB64(raw);
-  const fp = await sha256(new Uint8Array(raw));
+  const fp = await sha256(new Uint8Array(raw as ArrayBuffer));
   return {
     pubkeyB64,
     fingerprint: toHex(fp).slice(0, 16),
