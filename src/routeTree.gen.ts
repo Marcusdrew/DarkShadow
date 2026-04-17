@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as RRoomIdRouteImport } from './routes/r.$roomId'
 import { Route as RRoomIdExpiredRouteImport } from './routes/r.$roomId.expired'
 
 const NewRoute = NewRouteImport.update({
@@ -29,22 +30,29 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RRoomIdExpiredRoute = RRoomIdExpiredRouteImport.update({
-  id: '/r/$roomId/expired',
-  path: '/r/$roomId/expired',
+const RRoomIdRoute = RRoomIdRouteImport.update({
+  id: '/r/$roomId',
+  path: '/r/$roomId',
   getParentRoute: () => rootRouteImport,
+} as any)
+const RRoomIdExpiredRoute = RRoomIdExpiredRouteImport.update({
+  id: '/expired',
+  path: '/expired',
+  getParentRoute: () => RRoomIdRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/new': typeof NewRoute
+  '/r/$roomId': typeof RRoomIdRouteWithChildren
   '/r/$roomId/expired': typeof RRoomIdExpiredRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/new': typeof NewRoute
+  '/r/$roomId': typeof RRoomIdRouteWithChildren
   '/r/$roomId/expired': typeof RRoomIdExpiredRoute
 }
 export interface FileRoutesById {
@@ -52,21 +60,22 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/new': typeof NewRoute
+  '/r/$roomId': typeof RRoomIdRouteWithChildren
   '/r/$roomId/expired': typeof RRoomIdExpiredRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/new' | '/r/$roomId/expired'
+  fullPaths: '/' | '/about' | '/new' | '/r/$roomId' | '/r/$roomId/expired'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/new' | '/r/$roomId/expired'
-  id: '__root__' | '/' | '/about' | '/new' | '/r/$roomId/expired'
+  to: '/' | '/about' | '/new' | '/r/$roomId' | '/r/$roomId/expired'
+  id: '__root__' | '/' | '/about' | '/new' | '/r/$roomId' | '/r/$roomId/expired'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   NewRoute: typeof NewRoute
-  RRoomIdExpiredRoute: typeof RRoomIdExpiredRoute
+  RRoomIdRoute: typeof RRoomIdRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -92,21 +101,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/r/$roomId': {
+      id: '/r/$roomId'
+      path: '/r/$roomId'
+      fullPath: '/r/$roomId'
+      preLoaderRoute: typeof RRoomIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/r/$roomId/expired': {
       id: '/r/$roomId/expired'
-      path: '/r/$roomId/expired'
+      path: '/expired'
       fullPath: '/r/$roomId/expired'
       preLoaderRoute: typeof RRoomIdExpiredRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof RRoomIdRoute
     }
   }
 }
+
+interface RRoomIdRouteChildren {
+  RRoomIdExpiredRoute: typeof RRoomIdExpiredRoute
+}
+
+const RRoomIdRouteChildren: RRoomIdRouteChildren = {
+  RRoomIdExpiredRoute: RRoomIdExpiredRoute,
+}
+
+const RRoomIdRouteWithChildren =
+  RRoomIdRoute._addFileChildren(RRoomIdRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   NewRoute: NewRoute,
-  RRoomIdExpiredRoute: RRoomIdExpiredRoute,
+  RRoomIdRoute: RRoomIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
