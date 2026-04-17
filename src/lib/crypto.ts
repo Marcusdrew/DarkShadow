@@ -83,7 +83,11 @@ export async function decryptMessage(
 ): Promise<string> {
   const ct = fromB64(ciphertextB64);
   const iv = fromB64(ivB64);
-  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+  const pt = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: iv as BufferSource },
+    key,
+    ct as BufferSource,
+  );
   return dec.decode(pt);
 }
 
