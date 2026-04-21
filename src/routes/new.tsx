@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Oscilloscope } from "@/components/Oscilloscope";
+import { HexStream } from "@/components/HexStream";
 import { supabase } from "@/integrations/supabase/client";
 import { roomFingerprint } from "@/lib/crypto";
 import { toast } from "sonner";
@@ -61,9 +62,17 @@ function NewRoomPage() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden scan-lines">
+    <div className="relative min-h-screen overflow-hidden scan-lines crt-flicker">
       <Oscilloscope className="absolute inset-0 w-full h-full opacity-30" />
+      <HexStream className="absolute top-0 left-0 right-0 h-3" />
+      <HexStream className="absolute bottom-0 left-0 right-0 h-3" />
       <div className="relative z-10 max-w-2xl mx-auto px-6 py-12">
+        <a
+          href="/"
+          className="font-mono text-xs text-muted-foreground hover:text-primary tracking-widest"
+        >
+          ← RETOUR
+        </a>
         <div className="font-mono text-[10px] text-signal tracking-[0.4em] mb-3">
           ◉ NEW CHANNEL CONFIG
         </div>
@@ -104,6 +113,11 @@ function NewRoomPage() {
         >
           {creating ? "▸ ÉTABLISSEMENT…" : "▸ OUVRIR LE CANAL"}
         </Button>
+
+        <div className="mt-12 border-l-2 border-amber-deep/60 pl-4 max-w-md font-serif italic text-xs text-muted-foreground">
+          À l'ouverture, vous recevrez un lien et une empreinte. Le lien <em>est</em>
+          la clé : ne le partagez qu'aux personnes de confiance.
+        </div>
       </div>
     </div>
   );
