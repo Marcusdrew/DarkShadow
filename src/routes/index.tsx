@@ -2,6 +2,8 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Oscilloscope } from "@/components/Oscilloscope";
 import { HexStream } from "@/components/HexStream";
+import { SignalMeter } from "@/components/SignalMeter";
+import { AudioToggle } from "@/components/AudioToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getIdentity } from "@/lib/identity";
@@ -29,13 +31,20 @@ export const Route = createFileRoute("/")({
 function HomePage() {
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [joinId, setJoinId] = useState("");
+  const [now, setNow] = useState(() => new Date());
+  const [coords] = useState(() => ({
+    lat: (Math.random() * 180 - 90).toFixed(4),
+    lon: (Math.random() * 360 - 180).toFixed(4),
+  }));
 
   useEffect(() => {
     getIdentity().then(setIdentity);
+    const i = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(i);
   }, []);
 
   return (
-    <div className="relative min-h-screen overflow-hidden scan-lines">
+    <div className="relative min-h-screen overflow-hidden scan-lines crt-flicker">
       <Oscilloscope className="absolute inset-0 w-full h-full opacity-60" />
 
       {/* Top hex stream */}
@@ -43,26 +52,40 @@ function HomePage() {
       <HexStream className="absolute bottom-0 left-0 right-0 h-4 mb-2" />
 
       {/* Header */}
-      <header className="relative z-10 px-6 sm:px-10 py-6 flex items-center justify-between">
-        <div className="font-mono text-xs tracking-[0.3em] text-primary glow-amber breathe">
-          CIPHERROOM
+      <header className="relative z-10 px-6 sm:px-10 py-6 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="relative w-2 h-2 rounded-full bg-signal pulse-ring" />
+          <div className="font-mono text-xs tracking-[0.3em] text-primary glow-amber breathe">
+            CIPHERROOM
+          </div>
         </div>
-        <Link
-          to="/about"
-          className="font-mono text-xs text-muted-foreground hover:text-primary transition-colors tracking-widest"
-        >
-          ABOUT
-        </Link>
+        <div className="flex items-center gap-3">
+          <AudioToggle />
+          <Link
+            to="/about"
+            className="font-mono text-xs text-muted-foreground hover:text-primary transition-colors tracking-widest"
+          >
+            ABOUT
+          </Link>
+        </div>
       </header>
 
+      {/* Live status bar */}
+      <div className="relative z-10 px-6 sm:px-10 mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-[10px] text-muted-foreground tracking-[0.2em]">
+        <span>UTC {now.toISOString().slice(11, 19)}</span>
+        <span>LAT {coords.lat}° · LON {coords.lon}°</span>
+        <span className="flex items-center gap-2">SIG <SignalMeter /></span>
+        <span className="text-signal">◉ NO LOGS</span>
+      </div>
+
       {/* Main */}
-      <main className="relative z-10 px-6 sm:px-10 pt-12 sm:pt-20 pb-20 max-w-3xl mx-auto">
+      <main className="relative z-10 px-6 sm:px-10 pt-8 sm:pt-16 pb-20 max-w-3xl mx-auto">
         <div className="font-mono text-[10px] text-signal tracking-[0.4em] mb-6 animate-fade-in-up">
           ◉ SECURE CHANNEL // V1
         </div>
 
         <h1 className="font-serif text-5xl sm:text-7xl text-bone leading-[0.95] mb-8 animate-fade-in-up">
-          Le canal s'ouvre.
+          <span className="glitch-text" data-text="Le canal s'ouvre.">Le canal s'ouvre.</span>
           <br />
           <span className="text-primary glow-amber italic">Puis s'efface.</span>
         </h1>
