@@ -76,6 +76,7 @@ function RoomPage() {
   const [typingPeers, setTypingPeers] = useState<Record<string, number>>({});
   const [panic, setPanic] = useState(false);
   const [boost, setBoost] = useState(0);
+  const [shielded, setShielded] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -291,14 +292,26 @@ function RoomPage() {
     if (!identity) return;
     const onVis = () => {
       if (document.visibilityState === "hidden") {
+        setShielded(true);
         pushLog(`⚠ ${identity.pseudo} a quitté la fenêtre (capture possible)`, "warn");
         alertSound();
       } else {
+        setShielded(true);
+        // brief delay before revealing again to defeat quick screenshots on focus
+        setTimeout(() => setShielded(false), 600);
         pushLog(`▸ ${identity.pseudo} est de retour`, "info");
       }
     };
+    const onBlur = () => setShielded(true);
+    const onFocus = () => setTimeout(() => setShielded(false), 400);
     document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+    };
   }, [identity, pushLog]);
 
   // Panic shortcut Ctrl+.
