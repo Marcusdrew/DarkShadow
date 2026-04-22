@@ -617,6 +617,17 @@ function RoomPage() {
         roomId={roomId}
         roomFingerprint={room.fingerprint}
       />
+
+      {shielded && (
+        <div className="fixed inset-0 z-[9998] bg-black flex flex-col items-center justify-center text-center px-6">
+          <div className="font-mono text-xs text-primary tracking-[0.4em] mb-4 breathe">
+            ◉ CANAL VERROUILLÉ
+          </div>
+          <div className="font-serif italic text-bone/60 text-sm max-w-xs">
+            Le contenu est masqué tant que la fenêtre n'est pas active.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
