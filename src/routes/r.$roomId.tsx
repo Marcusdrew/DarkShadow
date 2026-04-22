@@ -315,19 +315,23 @@ function RoomPage() {
   }, [identity, pushLog]);
 
   // Panic shortcut Ctrl+.
+  const triggerPanic = useCallback(() => {
+    wipeIdentity();
+    setMessages([]);
+    setSystemLog([]);
+    setPanic(true);
+  }, []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === ".") {
         e.preventDefault();
-        wipeIdentity();
-        setMessages([]);
-        setSystemLog([]);
-        setPanic(true);
+        triggerPanic();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [triggerPanic]);
 
   // Auto-scroll
   useEffect(() => {
