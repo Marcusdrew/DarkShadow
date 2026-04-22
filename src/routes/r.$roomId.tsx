@@ -76,6 +76,7 @@ function RoomPage() {
   const [typingPeers, setTypingPeers] = useState<Record<string, number>>({});
   const [panic, setPanic] = useState(false);
   const [boost, setBoost] = useState(0);
+  const [shielded, setShielded] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -291,30 +292,46 @@ function RoomPage() {
     if (!identity) return;
     const onVis = () => {
       if (document.visibilityState === "hidden") {
+        setShielded(true);
         pushLog(`⚠ ${identity.pseudo} a quitté la fenêtre (capture possible)`, "warn");
         alertSound();
       } else {
+        setShielded(true);
+        // brief delay before revealing again to defeat quick screenshots on focus
+        setTimeout(() => setShielded(false), 600);
         pushLog(`▸ ${identity.pseudo} est de retour`, "info");
       }
     };
+    const onBlur = () => setShielded(true);
+    const onFocus = () => setTimeout(() => setShielded(false), 400);
     document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+    };
   }, [identity, pushLog]);
 
   // Panic shortcut Ctrl+.
+  const triggerPanic = useCallback(() => {
+    wipeIdentity();
+    setMessages([]);
+    setSystemLog([]);
+    setPanic(true);
+  }, []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === ".") {
         e.preventDefault();
-        wipeIdentity();
-        setMessages([]);
-        setSystemLog([]);
-        setPanic(true);
+        triggerPanic();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [triggerPanic]);
 
   // Auto-scroll
   useEffect(() => {
@@ -444,6 +461,15 @@ function RoomPage() {
             onClick={() => setVerifyOpen(true)}
           >
             VÉRIFIER
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            className="font-mono text-xs sm:hidden"
+            onClick={triggerPanic}
+            title="Effacer et quitter"
+          >
+            ⌧
           </Button>
         </div>
       </header>
@@ -591,6 +617,17 @@ function RoomPage() {
         roomId={roomId}
         roomFingerprint={room.fingerprint}
       />
+
+      {shielded && (
+        <div className="fixed inset-0 z-[9998] bg-black flex flex-col items-center justify-center text-center px-6">
+          <div className="font-mono text-xs text-primary tracking-[0.4em] mb-4 breathe">
+            ◉ CANAL VERROUILLÉ
+          </div>
+          <div className="font-serif italic text-bone/60 text-sm max-w-xs">
+            Le contenu est masqué tant que la fenêtre n'est pas active.
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -31,14 +31,16 @@ export const Route = createFileRoute("/")({
 function HomePage() {
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [joinId, setJoinId] = useState("");
-  const [now, setNow] = useState(() => new Date());
-  const [coords] = useState(() => ({
-    lat: (Math.random() * 180 - 90).toFixed(4),
-    lon: (Math.random() * 360 - 180).toFixed(4),
-  }));
+  const [now, setNow] = useState<Date | null>(null);
+  const [coords, setCoords] = useState<{ lat: string; lon: string } | null>(null);
 
   useEffect(() => {
     getIdentity().then(setIdentity);
+    setNow(new Date());
+    setCoords({
+      lat: (Math.random() * 180 - 90).toFixed(4),
+      lon: (Math.random() * 360 - 180).toFixed(4),
+    });
     const i = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(i);
   }, []);
@@ -72,8 +74,8 @@ function HomePage() {
 
       {/* Live status bar */}
       <div className="relative z-10 px-6 sm:px-10 mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-[10px] text-muted-foreground tracking-[0.2em]">
-        <span>UTC {now.toISOString().slice(11, 19)}</span>
-        <span>LAT {coords.lat}° · LON {coords.lon}°</span>
+        <span>UTC {now ? now.toISOString().slice(11, 19) : "--:--:--"}</span>
+        <span>LAT {coords?.lat ?? "--"}° · LON {coords?.lon ?? "--"}°</span>
         <span className="flex items-center gap-2">SIG <SignalMeter /></span>
         <span className="text-signal">◉ NO LOGS</span>
       </div>
