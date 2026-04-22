@@ -462,6 +462,15 @@ function RoomPage() {
           >
             VÉRIFIER
           </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            className="font-mono text-xs sm:hidden"
+            onClick={triggerPanic}
+            title="Effacer et quitter"
+          >
+            ⌧
+          </Button>
         </div>
       </header>
 
