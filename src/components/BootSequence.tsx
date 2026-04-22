@@ -46,7 +46,13 @@ export function BootSequence({ onDone }: { onDone: () => void }) {
   if (skipped) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background cursor-pointer"
+      onClick={() => {
+        setSkipped(true);
+        onDone();
+      }}
+    >
       <div className="font-mono text-sm text-primary glow-amber max-w-lg w-full px-6">
         <div className="text-xs text-muted-foreground mb-4 tracking-widest">
           [ CIPHERROOM // SECURE CHANNEL ]
@@ -58,7 +64,8 @@ export function BootSequence({ onDone }: { onDone: () => void }) {
         ))}
         <div className="text-bone typewriter-cursor inline-block mt-1" />
         <div className="mt-8 text-[10px] text-muted-foreground tracking-widest">
-          press ESC to skip
+          <span className="hidden sm:inline">press ESC to skip</span>
+          <span className="sm:hidden">▸ tap anywhere to skip</span>
         </div>
       </div>
     </div>
