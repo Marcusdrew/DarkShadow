@@ -184,6 +184,7 @@ function RoomPage() {
         }
         if (message.includes("room_expired")) {
           setRoomClosedReason("expired");
+          nav({ to: "/r/$roomId/expired", params: { roomId } });
           return;
         }
         throw joinError;
