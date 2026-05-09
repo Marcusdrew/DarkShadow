@@ -704,6 +704,31 @@ function RoomPage() {
   );
 }
 
+function ClosedRoomState({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden scan-lines capture-shield">
+      <Oscilloscope intensity={0.08} className="absolute inset-0 w-full h-full opacity-10" />
+      <HexStream className="absolute top-0 left-0 right-0 h-3" />
+      <HexStream className="absolute bottom-0 left-0 right-0 h-3" />
+      <div className="relative z-10 max-w-md text-center">
+        <div className="font-mono text-[10px] text-destructive tracking-[0.4em] mb-4">
+          ◉ ACCESS DENIED
+        </div>
+        <h1 className="font-serif text-5xl text-bone mb-4 italic glitch-text" data-text={title}>
+          {title}
+        </h1>
+        <p className="font-serif text-muted-foreground mb-8">{detail}</p>
+        <a
+          href="/"
+          className="font-mono text-sm text-primary glow-amber tracking-widest hover:opacity-80"
+        >
+          ▸ RETOUR AU TERMINAL
+        </a>
+      </div>
+    </div>
+  );
+}
+
 function Message({
   m,
   mine,
