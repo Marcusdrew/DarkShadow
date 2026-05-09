@@ -59,6 +59,25 @@ interface SystemEntry {
   kind: "info" | "warn" | "ok";
 }
 
+const SHIELD_HOLD_MS = 1800;
+const SCREENSHOT_KEYS = new Set([
+  "PrintScreen",
+  "F13",
+  "AudioVolumeUp",
+  "AudioVolumeDown",
+  "Power",
+]);
+
+function isCaptureShortcut(e: KeyboardEvent) {
+  const key = e.key.toLowerCase();
+  return (
+    SCREENSHOT_KEYS.has(e.key) ||
+    ((e.metaKey || e.ctrlKey) && e.shiftKey && key === "s") ||
+    (e.metaKey && e.shiftKey && ["3", "4", "5"].includes(key)) ||
+    ((e.ctrlKey || e.metaKey) && key === "printscreen")
+  );
+}
+
 function RoomPage() {
   const { roomId } = Route.useParams();
   const nav = useNavigate();
@@ -85,6 +104,7 @@ function RoomPage() {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const lastTypingSent = useRef(0);
   const logSeq = useRef(0);
+  const shieldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Identity + key
   useEffect(() => {
