@@ -4,7 +4,7 @@ function randomHex(len: number) {
   const chars = "0123456789abcdef";
   let s = "";
   for (let i = 0; i < len; i++) {
-    s += chars[Math.floor(Math.random() * 16)];
+    s += chars[(i * 7 + len * 3) % chars.length];
     if (i % 2 === 1 && i < len - 1) s += " ";
   }
   return s;
