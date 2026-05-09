@@ -318,41 +318,57 @@ function RoomPage() {
   // Room expiration
   useEffect(() => {
     if (!room) return;
-    const check = () => {
-      if (new Date(room.expires_at).getTime() < Date.now()) {
-        nav({ to: "/r/$roomId/expired", params: { roomId } });
-      }
+    const expireAt = new Date(room.expires_at).getTime();
+    const closeRoom = () => {
+      setRoomClosedReason("expired");
+      setMessages([]);
+      setInput("");
+      nav({ to: "/r/$roomId/expired", params: { roomId } });
     };
-    const i = setInterval(check, 5000);
-    return () => clearInterval(i);
+    if (expireAt <= Date.now()) {
+      closeRoom();
+      return;
+    }
+    const t = setTimeout(closeRoom, expireAt - Date.now());
+    return () => clearTimeout(t);
   }, [room, roomId, nav]);
 
-  // Visibility detection
+  // Visibility + capture shortcut detection
   useEffect(() => {
     if (!identity) return;
     const onVis = () => {
       if (document.visibilityState === "hidden") {
-        setShielded(true);
+        activateShield(4000);
         pushLog(`⚠ ${identity.pseudo} a quitté la fenêtre (capture possible)`, "warn");
         alertSound();
       } else {
-        setShielded(true);
-        // brief delay before revealing again to defeat quick screenshots on focus
-        setTimeout(() => setShielded(false), 600);
+        activateShield(900);
         pushLog(`▸ ${identity.pseudo} est de retour`, "info");
       }
     };
-    const onBlur = () => setShielded(true);
-    const onFocus = () => setTimeout(() => setShielded(false), 400);
+    const onBlur = () => activateShield(4000);
+    const onFocus = () => activateShield(900);
+    const onCaptureKey = (e: KeyboardEvent) => {
+      if (!isCaptureShortcut(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      activateShield(5000);
+      pushLog("⚠ tentative de capture masquée", "warn");
+      alertSound();
+    };
     document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("keydown", onCaptureKey, true);
+    window.addEventListener("keyup", onCaptureKey, true);
     window.addEventListener("blur", onBlur);
     window.addEventListener("focus", onFocus);
     return () => {
       document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("keydown", onCaptureKey, true);
+      window.removeEventListener("keyup", onCaptureKey, true);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("focus", onFocus);
     };
-  }, [identity, pushLog]);
+  }, [activateShield, identity, pushLog]);
 
   // Panic shortcut Ctrl+.
   const triggerPanic = useCallback(() => {
