@@ -202,6 +202,11 @@
     animation: blink 1s step-end infinite;
     margin-left: 2px;
   }
+
+  .capture-shield {
+    background: oklch(0 0 0);
+    color: var(--bone);
+  }
 }
 
 @keyframes breathe {

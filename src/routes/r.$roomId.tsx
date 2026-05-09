@@ -59,6 +59,25 @@ interface SystemEntry {
   kind: "info" | "warn" | "ok";
 }
 
+const SHIELD_HOLD_MS = 1800;
+const SCREENSHOT_KEYS = new Set([
+  "PrintScreen",
+  "F13",
+  "AudioVolumeUp",
+  "AudioVolumeDown",
+  "Power",
+]);
+
+function isCaptureShortcut(e: KeyboardEvent) {
+  const key = e.key.toLowerCase();
+  return (
+    SCREENSHOT_KEYS.has(e.key) ||
+    ((e.metaKey || e.ctrlKey) && e.shiftKey && key === "s") ||
+    (e.metaKey && e.shiftKey && ["3", "4", "5"].includes(key)) ||
+    ((e.ctrlKey || e.metaKey) && key === "printscreen")
+  );
+}
+
 function RoomPage() {
   const { roomId } = Route.useParams();
   const nav = useNavigate();
@@ -77,6 +96,7 @@ function RoomPage() {
   const [panic, setPanic] = useState(false);
   const [boost, setBoost] = useState(0);
   const [shielded, setShielded] = useState(false);
+  const [roomClosedReason, setRoomClosedReason] = useState<"expired" | "full" | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -85,6 +105,8 @@ function RoomPage() {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const lastTypingSent = useRef(0);
   const logSeq = useRef(0);
+  const shieldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const joinedRef = useRef(false);
 
   // Identity + key
   useEffect(() => {
@@ -110,7 +132,7 @@ function RoomPage() {
         .select("expires_at, message_ttl_seconds, fingerprint, max_participants")
         .eq("id", roomId)
         .maybeSingle();
-      if (error || !data) {
+      if (error || !data || new Date(data.expires_at).getTime() <= Date.now()) {
         nav({ to: "/r/$roomId/expired", params: { roomId } });
         return;
       }
@@ -127,16 +149,23 @@ function RoomPage() {
     setSystemLog((prev) => [...prev, { id: logSeq.current, text, kind }]);
   }, []);
 
+  const activateShield = useCallback((hold = SHIELD_HOLD_MS) => {
+    setShielded(true);
+    if (shieldTimer.current) clearTimeout(shieldTimer.current);
+    shieldTimer.current = setTimeout(() => setShielded(false), hold);
+  }, []);
+
   // Join + load + realtime
   useEffect(() => {
     if (!identity || !keyReady || !room) return;
 
     let cancelled = false;
+    joinedRef.current = false;
     pushLog("▸ liaison montante établie", "ok");
     pushLog(`▸ session ${identity.pseudo} (fp ${identity.fingerprint.slice(0, 8)})`);
 
     const init = async () => {
-      await supabase.from("room_participants").upsert(
+      const { error: joinError } = await supabase.from("room_participants").upsert(
         {
           room_id: roomId,
           fingerprint: identity.fingerprint,
@@ -146,6 +175,21 @@ function RoomPage() {
         },
         { onConflict: "room_id,fingerprint" },
       );
+      if (joinError) {
+        const message = joinError.message.toLowerCase();
+        if (message.includes("room_participant_limit_reached")) {
+          setRoomClosedReason("full");
+          toast.error("Canal complet");
+          return;
+        }
+        if (message.includes("room_expired")) {
+          setRoomClosedReason("expired");
+          nav({ to: "/r/$roomId/expired", params: { roomId } });
+          return;
+        }
+        throw joinError;
+      }
+      joinedRef.current = true;
 
       const { data: pData } = await supabase
         .from("room_participants")
@@ -194,6 +238,7 @@ function RoomPage() {
           filter: `room_id=eq.${roomId}`,
         },
         async (payload) => {
+          if (!joinedRef.current) return;
           const m = payload.new as {
             id: string;
             sender_pseudo: string;
@@ -234,6 +279,7 @@ function RoomPage() {
           filter: `room_id=eq.${roomId}`,
         },
         (payload) => {
+          if (!joinedRef.current) return;
           const p = payload.new as Participant;
           setParticipants((prev) =>
             prev.some((x) => x.fingerprint === p.fingerprint) ? prev : [...prev, p],
@@ -245,6 +291,7 @@ function RoomPage() {
         },
       )
       .on("broadcast", { event: "typing" }, (payload) => {
+        if (!joinedRef.current) return;
         const fp = (payload.payload as { fp?: string })?.fp;
         if (!fp || fp === identity.fingerprint) return;
         setTypingPeers((prev) => ({ ...prev, [fp]: Date.now() }));
@@ -255,6 +302,7 @@ function RoomPage() {
 
     return () => {
       cancelled = true;
+      joinedRef.current = false;
       supabase.removeChannel(channel);
       channelRef.current = null;
     };
@@ -278,41 +326,57 @@ function RoomPage() {
   // Room expiration
   useEffect(() => {
     if (!room) return;
-    const check = () => {
-      if (new Date(room.expires_at).getTime() < Date.now()) {
-        nav({ to: "/r/$roomId/expired", params: { roomId } });
-      }
+    const expireAt = new Date(room.expires_at).getTime();
+    const closeRoom = () => {
+      setRoomClosedReason("expired");
+      setMessages([]);
+      setInput("");
+      nav({ to: "/r/$roomId/expired", params: { roomId } });
     };
-    const i = setInterval(check, 5000);
-    return () => clearInterval(i);
+    if (expireAt <= Date.now()) {
+      closeRoom();
+      return;
+    }
+    const t = setTimeout(closeRoom, expireAt - Date.now());
+    return () => clearTimeout(t);
   }, [room, roomId, nav]);
 
-  // Visibility detection
+  // Visibility + capture shortcut detection
   useEffect(() => {
     if (!identity) return;
     const onVis = () => {
       if (document.visibilityState === "hidden") {
-        setShielded(true);
+        activateShield(4000);
         pushLog(`⚠ ${identity.pseudo} a quitté la fenêtre (capture possible)`, "warn");
         alertSound();
       } else {
-        setShielded(true);
-        // brief delay before revealing again to defeat quick screenshots on focus
-        setTimeout(() => setShielded(false), 600);
+        activateShield(900);
         pushLog(`▸ ${identity.pseudo} est de retour`, "info");
       }
     };
-    const onBlur = () => setShielded(true);
-    const onFocus = () => setTimeout(() => setShielded(false), 400);
+    const onBlur = () => activateShield(4000);
+    const onFocus = () => activateShield(900);
+    const onCaptureKey = (e: KeyboardEvent) => {
+      if (!isCaptureShortcut(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      activateShield(5000);
+      pushLog("⚠ tentative de capture masquée", "warn");
+      alertSound();
+    };
     document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("keydown", onCaptureKey, true);
+    window.addEventListener("keyup", onCaptureKey, true);
     window.addEventListener("blur", onBlur);
     window.addEventListener("focus", onFocus);
     return () => {
       document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("keydown", onCaptureKey, true);
+      window.removeEventListener("keyup", onCaptureKey, true);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("focus", onFocus);
     };
-  }, [identity, pushLog]);
+  }, [activateShield, identity, pushLog]);
 
   // Panic shortcut Ctrl+.
   const triggerPanic = useCallback(() => {
@@ -350,6 +414,11 @@ function RoomPage() {
 
   const send = async () => {
     if (!input.trim() || !keyReady || !identity || !room) return;
+    if (new Date(room.expires_at).getTime() <= Date.now() || roomClosedReason) {
+      setRoomClosedReason("expired");
+      toast.error("Canal fermé");
+      return;
+    }
     const text = input;
     setInput("");
     pulse();
@@ -399,6 +468,10 @@ function RoomPage() {
   };
 
   if (panic) return <PanicOverlay onClose={() => nav({ to: "/" })} />;
+
+  if (roomClosedReason === "full") {
+    return <ClosedRoomState title="Canal complet" detail="La limite de participants définie pour ce canal est atteinte." />;
+  }
 
   if (booting) return <BootSequence onDone={() => setBooting(false)} />;
 
@@ -619,7 +692,7 @@ function RoomPage() {
       />
 
       {shielded && (
-        <div className="fixed inset-0 z-[9998] bg-black flex flex-col items-center justify-center text-center px-6">
+        <div className="fixed inset-0 z-[9998] capture-shield flex flex-col items-center justify-center text-center px-6">
           <div className="font-mono text-xs text-primary tracking-[0.4em] mb-4 breathe">
             ◉ CANAL VERROUILLÉ
           </div>
@@ -628,6 +701,31 @@ function RoomPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ClosedRoomState({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden scan-lines capture-shield">
+      <Oscilloscope intensity={0.08} className="absolute inset-0 w-full h-full opacity-10" />
+      <HexStream className="absolute top-0 left-0 right-0 h-3" />
+      <HexStream className="absolute bottom-0 left-0 right-0 h-3" />
+      <div className="relative z-10 max-w-md text-center">
+        <div className="font-mono text-[10px] text-destructive tracking-[0.4em] mb-4">
+          ◉ ACCESS DENIED
+        </div>
+        <h1 className="font-serif text-5xl text-bone mb-4 italic glitch-text" data-text={title}>
+          {title}
+        </h1>
+        <p className="font-serif text-muted-foreground mb-8">{detail}</p>
+        <a
+          href="/"
+          className="font-mono text-sm text-primary glow-amber tracking-widest hover:opacity-80"
+        >
+          ▸ RETOUR AU TERMINAL
+        </a>
+      </div>
     </div>
   );
 }
