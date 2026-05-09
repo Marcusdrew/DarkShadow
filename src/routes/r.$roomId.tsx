@@ -163,7 +163,7 @@ function RoomPage() {
     pushLog(`▸ session ${identity.pseudo} (fp ${identity.fingerprint.slice(0, 8)})`);
 
     const init = async () => {
-      await supabase.from("room_participants").upsert(
+      const { error: joinError } = await supabase.from("room_participants").upsert(
         {
           room_id: roomId,
           fingerprint: identity.fingerprint,
@@ -173,6 +173,19 @@ function RoomPage() {
         },
         { onConflict: "room_id,fingerprint" },
       );
+      if (joinError) {
+        const message = joinError.message.toLowerCase();
+        if (message.includes("room_participant_limit_reached")) {
+          setRoomClosedReason("full");
+          toast.error("Canal complet");
+          return;
+        }
+        if (message.includes("room_expired")) {
+          setRoomClosedReason("expired");
+          return;
+        }
+        throw joinError;
+      }
 
       const { data: pData } = await supabase
         .from("room_participants")
