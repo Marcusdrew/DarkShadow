@@ -106,6 +106,7 @@ function RoomPage() {
   const lastTypingSent = useRef(0);
   const logSeq = useRef(0);
   const shieldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const joinedRef = useRef(false);
 
   // Identity + key
   useEffect(() => {
@@ -159,6 +160,7 @@ function RoomPage() {
     if (!identity || !keyReady || !room) return;
 
     let cancelled = false;
+    joinedRef.current = false;
     pushLog("▸ liaison montante établie", "ok");
     pushLog(`▸ session ${identity.pseudo} (fp ${identity.fingerprint.slice(0, 8)})`);
 
@@ -186,6 +188,7 @@ function RoomPage() {
         }
         throw joinError;
       }
+      joinedRef.current = true;
 
       const { data: pData } = await supabase
         .from("room_participants")
@@ -234,6 +237,7 @@ function RoomPage() {
           filter: `room_id=eq.${roomId}`,
         },
         async (payload) => {
+          if (!joinedRef.current) return;
           const m = payload.new as {
             id: string;
             sender_pseudo: string;
@@ -274,6 +278,7 @@ function RoomPage() {
           filter: `room_id=eq.${roomId}`,
         },
         (payload) => {
+          if (!joinedRef.current) return;
           const p = payload.new as Participant;
           setParticipants((prev) =>
             prev.some((x) => x.fingerprint === p.fingerprint) ? prev : [...prev, p],
@@ -285,6 +290,7 @@ function RoomPage() {
         },
       )
       .on("broadcast", { event: "typing" }, (payload) => {
+        if (!joinedRef.current) return;
         const fp = (payload.payload as { fp?: string })?.fp;
         if (!fp || fp === identity.fingerprint) return;
         setTypingPeers((prev) => ({ ...prev, [fp]: Date.now() }));
@@ -295,6 +301,7 @@ function RoomPage() {
 
     return () => {
       cancelled = true;
+      joinedRef.current = false;
       supabase.removeChannel(channel);
       channelRef.current = null;
     };
