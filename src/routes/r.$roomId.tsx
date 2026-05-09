@@ -96,6 +96,7 @@ function RoomPage() {
   const [panic, setPanic] = useState(false);
   const [boost, setBoost] = useState(0);
   const [shielded, setShielded] = useState(false);
+  const [roomClosedReason, setRoomClosedReason] = useState<"expired" | "full" | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -130,7 +131,7 @@ function RoomPage() {
         .select("expires_at, message_ttl_seconds, fingerprint, max_participants")
         .eq("id", roomId)
         .maybeSingle();
-      if (error || !data) {
+      if (error || !data || new Date(data.expires_at).getTime() <= Date.now()) {
         nav({ to: "/r/$roomId/expired", params: { roomId } });
         return;
       }
@@ -145,6 +146,12 @@ function RoomPage() {
   const pushLog = useCallback((text: string, kind: SystemEntry["kind"] = "info") => {
     logSeq.current += 1;
     setSystemLog((prev) => [...prev, { id: logSeq.current, text, kind }]);
+  }, []);
+
+  const activateShield = useCallback((hold = SHIELD_HOLD_MS) => {
+    setShielded(true);
+    if (shieldTimer.current) clearTimeout(shieldTimer.current);
+    shieldTimer.current = setTimeout(() => setShielded(false), hold);
   }, []);
 
   // Join + load + realtime
