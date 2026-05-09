@@ -413,6 +413,11 @@ function RoomPage() {
 
   const send = async () => {
     if (!input.trim() || !keyReady || !identity || !room) return;
+    if (new Date(room.expires_at).getTime() <= Date.now() || roomClosedReason) {
+      setRoomClosedReason("expired");
+      toast.error("Canal fermé");
+      return;
+    }
     const text = input;
     setInput("");
     pulse();
@@ -462,6 +467,10 @@ function RoomPage() {
   };
 
   if (panic) return <PanicOverlay onClose={() => nav({ to: "/" })} />;
+
+  if (roomClosedReason === "full") {
+    return <ClosedRoomState title="Canal complet" detail="La limite de participants définie pour ce canal est atteinte." />;
+  }
 
   if (booting) return <BootSequence onDone={() => setBooting(false)} />;
 
@@ -682,7 +691,7 @@ function RoomPage() {
       />
 
       {shielded && (
-        <div className="fixed inset-0 z-[9998] bg-black flex flex-col items-center justify-center text-center px-6">
+        <div className="fixed inset-0 z-[9998] capture-shield flex flex-col items-center justify-center text-center px-6">
           <div className="font-mono text-xs text-primary tracking-[0.4em] mb-4 breathe">
             ◉ CANAL VERROUILLÉ
           </div>
