@@ -5,12 +5,14 @@ import { useEffect, useState } from "react";
  * Pure visual — no real signal measurement.
  */
 export function SignalMeter({ boost = 0 }: { boost?: number }) {
-  const [level, setLevel] = useState(0.6);
+  const [level, setLevel] = useState(0.62);
 
   useEffect(() => {
+    let tick = 0;
     const i = setInterval(() => {
+      tick += 1;
       setLevel((l) => {
-        const drift = (Math.random() - 0.5) * 0.08;
+        const drift = Math.sin(tick * 1.37) * 0.04;
         return Math.max(0.35, Math.min(0.95, l + drift));
       });
     }, 350);
