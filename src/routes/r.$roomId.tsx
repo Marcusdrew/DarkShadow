@@ -97,6 +97,7 @@ type SecurityEventType = "capture" | "hidden" | "visible" | "pagehide";
 function RoomPage() {
   const { roomId } = Route.useParams();
   const nav = useNavigate();
+  const coarse = useCoarsePointer();
 
   const [booting, setBooting] = useState(true);
   const [identity, setIdentity] = useState<Identity | null>(null);
@@ -732,6 +733,7 @@ function RoomPage() {
                 m={m}
                 mine={m.fingerprint === identity.fingerprint}
                 ttlSeconds={room.message_ttl_seconds}
+                requireReveal={coarse}
               />
             ))}
             {/* Mobile inline log */}
@@ -766,6 +768,11 @@ function RoomPage() {
 
           {/* Input */}
           <div className="border-t border-border/60 bg-background/70 backdrop-blur p-3 sm:p-4">
+            {coarse && (
+              <div className="font-mono text-[9px] text-amber-deep tracking-widest mb-2 text-center">
+                ◉ MODE TACTILE — APPUYEZ POUR RÉVÉLER · ÉCRAN MASQUÉ EN ARRIÈRE-PLAN
+              </div>
+            )}
             <div className="flex gap-2">
               <textarea
                 ref={inputRef}
