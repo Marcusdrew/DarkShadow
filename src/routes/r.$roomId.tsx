@@ -79,25 +79,11 @@ function isCaptureShortcut(e: KeyboardEvent) {
   );
 }
 
-function useCoarsePointer() {
-  const [coarse, setCoarse] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return;
-    const mql = window.matchMedia("(pointer: coarse)");
-    const onChange = () => setCoarse(mql.matches);
-    onChange();
-    mql.addEventListener?.("change", onChange);
-    return () => mql.removeEventListener?.("change", onChange);
-  }, []);
-  return coarse;
-}
-
 type SecurityEventType = "capture" | "hidden" | "visible" | "pagehide";
 
 function RoomPage() {
   const { roomId } = Route.useParams();
   const nav = useNavigate();
-  const coarse = useCoarsePointer();
 
   const [booting, setBooting] = useState(true);
   const [identity, setIdentity] = useState<Identity | null>(null);
@@ -369,7 +355,7 @@ function RoomPage() {
           setRoomClosedReason("expired");
           setMessages([]);
           setInput("");
-          lockShield();
+          toast("⏱ Le canal a expiré", { description: "Tous les messages ont été dissipés." });
           nav({ to: "/r/$roomId/expired", params: { roomId } });
           return;
         }
@@ -396,7 +382,7 @@ function RoomPage() {
       channelRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [identity, keyReady, lockShield, nav, pushLog, room, roomId]);
+  }, [identity, keyReady, nav, pushLog, room, roomId]);
 
   // Auto-expire messages
   useEffect(() => {
@@ -420,7 +406,7 @@ function RoomPage() {
       setRoomClosedReason("expired");
       setMessages([]);
       setInput("");
-      lockShield();
+      toast("⏱ Le canal a expiré", { description: "Tous les messages ont été dissipés." });
       if (channelRef.current && identity && joinedRef.current) {
         void channelRef.current.send({
           type: "broadcast",
@@ -448,7 +434,7 @@ function RoomPage() {
       clearTimeout(t);
       clearInterval(i);
     };
-  }, [identity, lockShield, room, roomId, nav]);
+  }, [identity, room, roomId, nav]);
 
   // Visibility + capture shortcut detection
   useEffect(() => {
@@ -733,7 +719,6 @@ function RoomPage() {
                 m={m}
                 mine={m.fingerprint === identity.fingerprint}
                 ttlSeconds={room.message_ttl_seconds}
-                requireReveal={coarse}
               />
             ))}
             {/* Mobile inline log */}
@@ -768,11 +753,6 @@ function RoomPage() {
 
           {/* Input */}
           <div className="border-t border-border/60 bg-background/70 backdrop-blur p-3 sm:p-4">
-            {coarse && (
-              <div className="font-mono text-[9px] text-amber-deep tracking-widest mb-2 text-center">
-                ◉ MODE TACTILE — APPUYEZ POUR RÉVÉLER · ÉCRAN MASQUÉ EN ARRIÈRE-PLAN
-              </div>
-            )}
             <div className="flex gap-2">
               <textarea
                 ref={inputRef}
