@@ -59,7 +59,7 @@ interface SystemEntry {
   kind: "info" | "warn" | "ok";
 }
 
-const SHIELD_HOLD_MS = 1800;
+const SHIELD_HOLD_MS = 3200;
 const SCREENSHOT_KEYS = new Set([
   "PrintScreen",
   "F13",
@@ -74,9 +74,12 @@ function isCaptureShortcut(e: KeyboardEvent) {
     SCREENSHOT_KEYS.has(e.key) ||
     ((e.metaKey || e.ctrlKey) && e.shiftKey && key === "s") ||
     (e.metaKey && e.shiftKey && ["3", "4", "5"].includes(key)) ||
-    ((e.ctrlKey || e.metaKey) && key === "printscreen")
+    ((e.ctrlKey || e.metaKey || e.altKey) && key === "printscreen") ||
+    (e.metaKey && ["s", "printscreen"].includes(key))
   );
 }
+
+type SecurityEventType = "capture" | "hidden" | "visible" | "pagehide";
 
 function RoomPage() {
   const { roomId } = Route.useParams();
@@ -106,6 +109,7 @@ function RoomPage() {
   const lastTypingSent = useRef(0);
   const logSeq = useRef(0);
   const shieldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shieldLocked = useRef(false);
   const joinedRef = useRef(false);
 
   // Identity + key
@@ -149,10 +153,53 @@ function RoomPage() {
     setSystemLog((prev) => [...prev, { id: logSeq.current, text, kind }]);
   }, []);
 
-  const activateShield = useCallback((hold = SHIELD_HOLD_MS) => {
+  const showShield = useCallback(() => {
+    document.documentElement.classList.add("capture-active");
     setShielded(true);
+  }, []);
+
+  const hideShield = useCallback(() => {
+    if (shieldLocked.current) return;
+    document.documentElement.classList.remove("capture-active");
+    setShielded(false);
+  }, []);
+
+  const activateShield = useCallback((hold = SHIELD_HOLD_MS) => {
+    shieldLocked.current = false;
+    showShield();
     if (shieldTimer.current) clearTimeout(shieldTimer.current);
-    shieldTimer.current = setTimeout(() => setShielded(false), hold);
+    shieldTimer.current = setTimeout(hideShield, hold);
+  }, [hideShield, showShield]);
+
+  const lockShield = useCallback(() => {
+    shieldLocked.current = true;
+    if (shieldTimer.current) clearTimeout(shieldTimer.current);
+    showShield();
+  }, [showShield]);
+
+  const releaseShield = useCallback((hold = 900) => {
+    shieldLocked.current = false;
+    if (shieldTimer.current) clearTimeout(shieldTimer.current);
+    shieldTimer.current = setTimeout(hideShield, hold);
+  }, [hideShield]);
+
+  const broadcastSecurity = useCallback((type: SecurityEventType) => {
+    if (!channelRef.current || !identity || !joinedRef.current) return;
+    void channelRef.current.send({
+      type: "broadcast",
+      event: "security",
+      payload: {
+        type,
+        fp: identity.fingerprint,
+        pseudo: identity.pseudo,
+        at: Date.now(),
+      },
+    });
+  }, [identity]);
+
+  useEffect(() => () => {
+    if (shieldTimer.current) clearTimeout(shieldTimer.current);
+    document.documentElement.classList.remove("capture-active");
   }, []);
 
   // Join + load + realtime
