@@ -18,6 +18,7 @@ export const Route = createFileRoute("/new")({
 });
 
 const ROOM_DURATIONS = [
+  { label: "5 min", value: 5 * 60 },
   { label: "15 min", value: 15 * 60 },
   { label: "1 heure", value: 60 * 60 },
   { label: "24 heures", value: 24 * 60 * 60 },
