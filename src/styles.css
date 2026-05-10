@@ -207,6 +207,21 @@
     background: oklch(0 0 0);
     color: var(--bone);
   }
+
+  .capture-active body > * {
+    visibility: hidden !important;
+  }
+
+  .capture-active body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 2147483647;
+    visibility: visible !important;
+    opacity: 1;
+    background: oklch(0 0 0);
+    mix-blend-mode: normal;
+  }
 }
 
 @keyframes breathe {
