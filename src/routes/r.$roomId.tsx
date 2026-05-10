@@ -858,12 +858,28 @@ function Message({
   m,
   mine,
   ttlSeconds,
+  requireReveal,
 }: {
   m: Msg;
   mine: boolean;
   ttlSeconds: number;
+  requireReveal?: boolean;
 }) {
   const [done, setDone] = useState(!m.fresh);
+  const [revealed, setRevealed] = useState(!requireReveal);
+  const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!requireReveal) setRevealed(true);
+  }, [requireReveal]);
+  useEffect(() => () => {
+    if (revealTimer.current) clearTimeout(revealTimer.current);
+  }, []);
+  const reveal = () => {
+    if (!requireReveal) return;
+    setRevealed(true);
+    if (revealTimer.current) clearTimeout(revealTimer.current);
+    revealTimer.current = setTimeout(() => setRevealed(false), 4500);
+  };
   return (
     <div
       className={`flex flex-col gap-1 animate-fade-in-up ${mine ? "items-end" : "items-start"}`}
@@ -878,13 +894,21 @@ function Message({
         )}
       </div>
       <div
+        onPointerDown={reveal}
         className={`max-w-[80%] relative rounded-md px-4 py-2 font-serif text-base leading-relaxed overflow-hidden ${
           mine
             ? "bg-primary/15 border border-primary/30 text-bone"
             : "bg-card/60 border border-border/60 text-bone"
-        }`}
+        } ${requireReveal && !revealed ? "cursor-pointer select-none" : ""}`}
       >
-        {done ? m.text : <DecryptingText text={m.text} onDone={() => setDone(true)} />}
+        <span className={requireReveal && !revealed ? "blur-md opacity-60" : ""}>
+          {done ? m.text : <DecryptingText text={m.text} onDone={() => setDone(true)} />}
+        </span>
+        {requireReveal && !revealed && (
+          <span className="absolute inset-0 flex items-center justify-center font-mono text-[10px] text-primary tracking-[0.3em] bg-background/30 backdrop-blur-sm">
+            ◉ APPUYER
+          </span>
+        )}
         {m.fresh && !done && (
           <div className="absolute inset-x-0 top-0 h-px bg-signal/60 animate-signal-sweep" />
         )}
