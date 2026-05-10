@@ -416,12 +416,24 @@ function RoomPage() {
       }
       nav({ to: "/r/$roomId/expired", params: { roomId } });
     };
+    const verifyStillOpen = async () => {
+      const { data } = await supabase
+        .from("rooms")
+        .select("expires_at")
+        .eq("id", roomId)
+        .maybeSingle();
+      if (!data || new Date(data.expires_at).getTime() <= Date.now()) closeRoom();
+    };
     if (expireAt <= Date.now()) {
       closeRoom();
       return;
     }
     const t = setTimeout(closeRoom, expireAt - Date.now());
-    return () => clearTimeout(t);
+    const i = setInterval(verifyStillOpen, 5000);
+    return () => {
+      clearTimeout(t);
+      clearInterval(i);
+    };
   }, [identity, lockShield, room, roomId, nav]);
 
   // Visibility + capture shortcut detection
