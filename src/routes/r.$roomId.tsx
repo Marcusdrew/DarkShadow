@@ -343,6 +343,34 @@ function RoomPage() {
         if (!fp || fp === identity.fingerprint) return;
         setTypingPeers((prev) => ({ ...prev, [fp]: Date.now() }));
       })
+      .on("broadcast", { event: "security" }, (payload) => {
+        if (!joinedRef.current) return;
+        const event = payload.payload as {
+          type?: SecurityEventType | "room_expired";
+          fp?: string;
+          pseudo?: string;
+        };
+        if (!event.fp || event.fp === identity.fingerprint) return;
+        if (event.type === "room_expired") {
+          setRoomClosedReason("expired");
+          setMessages([]);
+          setInput("");
+          lockShield();
+          nav({ to: "/r/$roomId/expired", params: { roomId } });
+          return;
+        }
+        if (event.type === "capture") {
+          pushLog(`⚠ ${event.pseudo ?? "un poste"} a tenté une capture`, "warn");
+          alertSound();
+          return;
+        }
+        if (event.type === "hidden" || event.type === "pagehide") {
+          pushLog(`⚠ ${event.pseudo ?? "un poste"} a quitté la fenêtre`, "warn");
+          alertSound();
+          return;
+        }
+        if (event.type === "visible") pushLog(`▸ ${event.pseudo ?? "un poste"} est revenu`, "info");
+      })
       .subscribe();
 
     channelRef.current = channel;
@@ -354,7 +382,7 @@ function RoomPage() {
       channelRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [identity, keyReady, room, roomId]);
+  }, [identity, keyReady, lockShield, nav, pushLog, room, roomId]);
 
   // Auto-expire messages
   useEffect(() => {
