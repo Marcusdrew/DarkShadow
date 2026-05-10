@@ -59,7 +59,7 @@ interface SystemEntry {
   kind: "info" | "warn" | "ok";
 }
 
-const SHIELD_HOLD_MS = 1800;
+const SHIELD_HOLD_MS = 3200;
 const SCREENSHOT_KEYS = new Set([
   "PrintScreen",
   "F13",
@@ -74,9 +74,12 @@ function isCaptureShortcut(e: KeyboardEvent) {
     SCREENSHOT_KEYS.has(e.key) ||
     ((e.metaKey || e.ctrlKey) && e.shiftKey && key === "s") ||
     (e.metaKey && e.shiftKey && ["3", "4", "5"].includes(key)) ||
-    ((e.ctrlKey || e.metaKey) && key === "printscreen")
+    ((e.ctrlKey || e.metaKey || e.altKey) && key === "printscreen") ||
+    (e.metaKey && ["s", "printscreen"].includes(key))
   );
 }
+
+type SecurityEventType = "capture" | "hidden" | "visible" | "pagehide";
 
 function RoomPage() {
   const { roomId } = Route.useParams();
@@ -106,6 +109,7 @@ function RoomPage() {
   const lastTypingSent = useRef(0);
   const logSeq = useRef(0);
   const shieldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shieldLocked = useRef(false);
   const joinedRef = useRef(false);
 
   // Identity + key
@@ -149,10 +153,53 @@ function RoomPage() {
     setSystemLog((prev) => [...prev, { id: logSeq.current, text, kind }]);
   }, []);
 
-  const activateShield = useCallback((hold = SHIELD_HOLD_MS) => {
+  const showShield = useCallback(() => {
+    document.documentElement.classList.add("capture-active");
     setShielded(true);
+  }, []);
+
+  const hideShield = useCallback(() => {
+    if (shieldLocked.current) return;
+    document.documentElement.classList.remove("capture-active");
+    setShielded(false);
+  }, []);
+
+  const activateShield = useCallback((hold = SHIELD_HOLD_MS) => {
+    shieldLocked.current = false;
+    showShield();
     if (shieldTimer.current) clearTimeout(shieldTimer.current);
-    shieldTimer.current = setTimeout(() => setShielded(false), hold);
+    shieldTimer.current = setTimeout(hideShield, hold);
+  }, [hideShield, showShield]);
+
+  const lockShield = useCallback(() => {
+    shieldLocked.current = true;
+    if (shieldTimer.current) clearTimeout(shieldTimer.current);
+    showShield();
+  }, [showShield]);
+
+  const releaseShield = useCallback((hold = 900) => {
+    shieldLocked.current = false;
+    if (shieldTimer.current) clearTimeout(shieldTimer.current);
+    shieldTimer.current = setTimeout(hideShield, hold);
+  }, [hideShield]);
+
+  const broadcastSecurity = useCallback((type: SecurityEventType) => {
+    if (!channelRef.current || !identity || !joinedRef.current) return;
+    void channelRef.current.send({
+      type: "broadcast",
+      event: "security",
+      payload: {
+        type,
+        fp: identity.fingerprint,
+        pseudo: identity.pseudo,
+        at: Date.now(),
+      },
+    });
+  }, [identity]);
+
+  useEffect(() => () => {
+    if (shieldTimer.current) clearTimeout(shieldTimer.current);
+    document.documentElement.classList.remove("capture-active");
   }, []);
 
   // Join + load + realtime
@@ -296,6 +343,34 @@ function RoomPage() {
         if (!fp || fp === identity.fingerprint) return;
         setTypingPeers((prev) => ({ ...prev, [fp]: Date.now() }));
       })
+      .on("broadcast", { event: "security" }, (payload) => {
+        if (!joinedRef.current) return;
+        const event = payload.payload as {
+          type?: SecurityEventType | "room_expired";
+          fp?: string;
+          pseudo?: string;
+        };
+        if (!event.fp || event.fp === identity.fingerprint) return;
+        if (event.type === "room_expired") {
+          setRoomClosedReason("expired");
+          setMessages([]);
+          setInput("");
+          lockShield();
+          nav({ to: "/r/$roomId/expired", params: { roomId } });
+          return;
+        }
+        if (event.type === "capture") {
+          pushLog(`⚠ ${event.pseudo ?? "un poste"} a tenté une capture`, "warn");
+          alertSound();
+          return;
+        }
+        if (event.type === "hidden" || event.type === "pagehide") {
+          pushLog(`⚠ ${event.pseudo ?? "un poste"} a quitté la fenêtre`, "warn");
+          alertSound();
+          return;
+        }
+        if (event.type === "visible") pushLog(`▸ ${event.pseudo ?? "un poste"} est revenu`, "info");
+      })
       .subscribe();
 
     channelRef.current = channel;
@@ -307,7 +382,7 @@ function RoomPage() {
       channelRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [identity, keyReady, room, roomId]);
+  }, [identity, keyReady, lockShield, nav, pushLog, room, roomId]);
 
   // Auto-expire messages
   useEffect(() => {
@@ -331,36 +406,63 @@ function RoomPage() {
       setRoomClosedReason("expired");
       setMessages([]);
       setInput("");
+      lockShield();
+      if (channelRef.current && identity && joinedRef.current) {
+        void channelRef.current.send({
+          type: "broadcast",
+          event: "security",
+          payload: { type: "room_expired", fp: identity.fingerprint, pseudo: identity.pseudo, at: Date.now() },
+        });
+      }
       nav({ to: "/r/$roomId/expired", params: { roomId } });
+    };
+    const verifyStillOpen = async () => {
+      const { data } = await supabase
+        .from("rooms")
+        .select("expires_at")
+        .eq("id", roomId)
+        .maybeSingle();
+      if (!data || new Date(data.expires_at).getTime() <= Date.now()) closeRoom();
     };
     if (expireAt <= Date.now()) {
       closeRoom();
       return;
     }
     const t = setTimeout(closeRoom, expireAt - Date.now());
-    return () => clearTimeout(t);
-  }, [room, roomId, nav]);
+    const i = setInterval(verifyStillOpen, 5000);
+    return () => {
+      clearTimeout(t);
+      clearInterval(i);
+    };
+  }, [identity, lockShield, room, roomId, nav]);
 
   // Visibility + capture shortcut detection
   useEffect(() => {
     if (!identity) return;
     const onVis = () => {
       if (document.visibilityState === "hidden") {
-        activateShield(4000);
+        lockShield();
+        broadcastSecurity("hidden");
         pushLog(`⚠ ${identity.pseudo} a quitté la fenêtre (capture possible)`, "warn");
         alertSound();
       } else {
-        activateShield(900);
+        releaseShield(900);
+        broadcastSecurity("visible");
         pushLog(`▸ ${identity.pseudo} est de retour`, "info");
       }
     };
-    const onBlur = () => activateShield(4000);
-    const onFocus = () => activateShield(900);
+    const onBlur = () => lockShield();
+    const onFocus = () => releaseShield(900);
+    const onPageHide = () => {
+      lockShield();
+      broadcastSecurity("pagehide");
+    };
     const onCaptureKey = (e: KeyboardEvent) => {
       if (!isCaptureShortcut(e)) return;
       e.preventDefault();
       e.stopPropagation();
-      activateShield(5000);
+      activateShield(6500);
+      broadcastSecurity("capture");
       pushLog("⚠ tentative de capture masquée", "warn");
       alertSound();
     };
@@ -369,14 +471,16 @@ function RoomPage() {
     window.addEventListener("keyup", onCaptureKey, true);
     window.addEventListener("blur", onBlur);
     window.addEventListener("focus", onFocus);
+    window.addEventListener("pagehide", onPageHide);
     return () => {
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("keydown", onCaptureKey, true);
       window.removeEventListener("keyup", onCaptureKey, true);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pagehide", onPageHide);
     };
-  }, [activateShield, identity, pushLog]);
+  }, [activateShield, broadcastSecurity, identity, lockShield, pushLog, releaseShield]);
 
   // Panic shortcut Ctrl+.
   const triggerPanic = useCallback(() => {
