@@ -79,6 +79,19 @@ function isCaptureShortcut(e: KeyboardEvent) {
   );
 }
 
+function useCoarsePointer() {
+  const [coarse, setCoarse] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mql = window.matchMedia("(pointer: coarse)");
+    const onChange = () => setCoarse(mql.matches);
+    onChange();
+    mql.addEventListener?.("change", onChange);
+    return () => mql.removeEventListener?.("change", onChange);
+  }, []);
+  return coarse;
+}
+
 type SecurityEventType = "capture" | "hidden" | "visible" | "pagehide";
 
 function RoomPage() {
