@@ -101,6 +101,7 @@ export type Database = {
           id: string
           max_participants: number
           message_ttl_seconds: number
+          salt: string | null
         }
         Insert: {
           created_at?: string
@@ -109,6 +110,7 @@ export type Database = {
           id?: string
           max_participants?: number
           message_ttl_seconds?: number
+          salt?: string | null
         }
         Update: {
           created_at?: string
@@ -117,6 +119,7 @@ export type Database = {
           id?: string
           max_participants?: number
           message_ttl_seconds?: number
+          salt?: string | null
         }
         Relationships: []
       }

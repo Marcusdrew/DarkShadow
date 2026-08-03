@@ -119,9 +119,6 @@ function RoomPage() {
       const id = await getIdentity();
       if (!mounted) return;
       setIdentity(id);
-      const k = await deriveRoomKey(roomId);
-      if (!mounted) return;
-      setKeyReady(k);
     })();
     return () => {
       mounted = false;
@@ -130,10 +127,11 @@ function RoomPage() {
 
   // Load room meta
   useEffect(() => {
+    let mounted = true;
     (async () => {
       const { data, error } = await supabase
         .from("rooms")
-        .select("expires_at, message_ttl_seconds, fingerprint, max_participants")
+        .select("expires_at, message_ttl_seconds, fingerprint, max_participants, salt")
         .eq("id", roomId)
         .maybeSingle();
       if (error || !data || new Date(data.expires_at).getTime() <= Date.now()) {
@@ -144,8 +142,14 @@ function RoomPage() {
       if (data.fingerprint !== expectedFp) {
         toast.error("Empreinte du salon invalide");
       }
+      const k = await deriveRoomKey(roomId, data.salt);
+      if (!mounted) return;
+      setKeyReady(k);
       setRoom(data as RoomMeta);
     })();
+    return () => {
+      mounted = false;
+    };
   }, [roomId, nav]);
 
   const pushLog = useCallback((text: string, kind: SystemEntry["kind"] = "info") => {

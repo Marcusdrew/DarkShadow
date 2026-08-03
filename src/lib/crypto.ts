@@ -40,8 +40,23 @@ export async function sha256(input: string | Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(hash);
 }
 
-/** Derive an AES-GCM CryptoKey from the room id (shared secret). */
-export async function deriveRoomKey(roomId: string): Promise<CryptoKey> {
+/** Legacy salt, kept for rooms created before per-room salts existed. */
+const LEGACY_SALT = "cipherroom:v1:salt";
+
+/** Generate a random, per-room PBKDF2 salt (base64). Salts need not be secret, only unique. */
+export function generateRoomSalt(): string {
+  return toB64(crypto.getRandomValues(new Uint8Array(16)));
+}
+
+/**
+ * Derive an AES-GCM CryptoKey from the room id (shared secret) and the room's salt.
+ * `salt` is the base64 value stored with the room; null/undefined falls back to the legacy salt.
+ */
+export async function deriveRoomKey(
+  roomId: string,
+  salt?: string | null,
+): Promise<CryptoKey> {
+  const saltBytes: Uint8Array = salt ? fromB64(salt) : enc.encode(LEGACY_SALT);
   const baseKey = await crypto.subtle.importKey(
     "raw",
     enc.encode(roomId),
@@ -52,7 +67,7 @@ export async function deriveRoomKey(roomId: string): Promise<CryptoKey> {
   return crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
-      salt: enc.encode("cipherroom:v1:salt"),
+      salt: saltBytes as BufferSource,
       iterations: 100_000,
       hash: "SHA-256",
     },
