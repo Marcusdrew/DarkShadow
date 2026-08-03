@@ -9,6 +9,18 @@ export const Route = createFileRoute("/about")({
         name: "description",
         content: "Modèle de sécurité de CipherRoom, ce qui est protégé et ce qui ne l'est pas.",
       },
+      { property: "og:title", content: "À propos — CipherRoom" },
+      {
+        property: "og:description",
+        content: "Modèle de sécurité de CipherRoom, ce qui est protégé et ce qui ne l'est pas.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+      { name: "twitter:title", content: "À propos — CipherRoom" },
+      {
+        name: "twitter:description",
+        content: "Modèle de sécurité de CipherRoom, ce qui est protégé et ce qui ne l'est pas.",
+      },
     ],
   }),
   component: AboutPage,
