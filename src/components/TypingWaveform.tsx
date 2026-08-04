@@ -13,6 +13,9 @@ export function TypingWaveform({ active = true }: { active?: boolean }) {
     if (!ctx) return;
     let raf = 0;
     let t = 0;
+    const reduced =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const dpr = window.devicePixelRatio || 1;
     const resize = () => {
       canvas.width = canvas.clientWidth * dpr;
@@ -37,6 +40,7 @@ export function TypingWaveform({ active = true }: { active?: boolean }) {
         else ctx.lineTo(x, y);
       }
       ctx.stroke();
+      if (reduced) return;
       t += 1;
       raf = requestAnimationFrame(draw);
     };
