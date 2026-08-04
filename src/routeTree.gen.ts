@@ -12,8 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as NewRouteImport } from './routes/new'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as RRoomIdRouteImport } from './routes/r.$roomId'
-import { Route as RRoomIdExpiredRouteImport } from './routes/r.$roomId.expired'
+import { Route as RIndexRouteImport } from './routes/r.index'
 
 const NewRoute = NewRouteImport.update({
   id: '/new',
@@ -30,52 +29,44 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RRoomIdRoute = RRoomIdRouteImport.update({
-  id: '/r/$roomId',
-  path: '/r/$roomId',
+const RIndexRoute = RIndexRouteImport.update({
+  id: '/r/',
+  path: '/r/',
   getParentRoute: () => rootRouteImport,
-} as any)
-const RRoomIdExpiredRoute = RRoomIdExpiredRouteImport.update({
-  id: '/expired',
-  path: '/expired',
-  getParentRoute: () => RRoomIdRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/new': typeof NewRoute
-  '/r/$roomId': typeof RRoomIdRouteWithChildren
-  '/r/$roomId/expired': typeof RRoomIdExpiredRoute
+  '/r/': typeof RIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/new': typeof NewRoute
-  '/r/$roomId': typeof RRoomIdRouteWithChildren
-  '/r/$roomId/expired': typeof RRoomIdExpiredRoute
+  '/r': typeof RIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/new': typeof NewRoute
-  '/r/$roomId': typeof RRoomIdRouteWithChildren
-  '/r/$roomId/expired': typeof RRoomIdExpiredRoute
+  '/r/': typeof RIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/new' | '/r/$roomId' | '/r/$roomId/expired'
+  fullPaths: '/' | '/about' | '/new' | '/r/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/new' | '/r/$roomId' | '/r/$roomId/expired'
-  id: '__root__' | '/' | '/about' | '/new' | '/r/$roomId' | '/r/$roomId/expired'
+  to: '/' | '/about' | '/new' | '/r'
+  id: '__root__' | '/' | '/about' | '/new' | '/r/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   NewRoute: typeof NewRoute
-  RRoomIdRoute: typeof RRoomIdRouteWithChildren
+  RIndexRoute: typeof RIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -101,49 +92,22 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/r/$roomId': {
-      id: '/r/$roomId'
-      path: '/r/$roomId'
-      fullPath: '/r/$roomId'
-      preLoaderRoute: typeof RRoomIdRouteImport
+    '/r/': {
+      id: '/r/'
+      path: '/r'
+      fullPath: '/r/'
+      preLoaderRoute: typeof RIndexRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/r/$roomId/expired': {
-      id: '/r/$roomId/expired'
-      path: '/expired'
-      fullPath: '/r/$roomId/expired'
-      preLoaderRoute: typeof RRoomIdExpiredRouteImport
-      parentRoute: typeof RRoomIdRoute
     }
   }
 }
-
-interface RRoomIdRouteChildren {
-  RRoomIdExpiredRoute: typeof RRoomIdExpiredRoute
-}
-
-const RRoomIdRouteChildren: RRoomIdRouteChildren = {
-  RRoomIdExpiredRoute: RRoomIdExpiredRoute,
-}
-
-const RRoomIdRouteWithChildren =
-  RRoomIdRoute._addFileChildren(RRoomIdRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   NewRoute: NewRoute,
-  RRoomIdRoute: RRoomIdRouteWithChildren,
+  RIndexRoute: RIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

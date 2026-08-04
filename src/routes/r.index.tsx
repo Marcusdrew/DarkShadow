@@ -22,7 +22,7 @@ import type { Identity } from "@/lib/identity";
 import { alertSound, clickSound, pingSound } from "@/lib/audio";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/r/$roomId")({
+export const Route = createFileRoute("/r/")({
   head: ({ params }) => ({
     meta: [
       { title: `Canal ${params.roomId.slice(0, 8)} — CipherRoom` },
