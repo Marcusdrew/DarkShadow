@@ -25,7 +25,7 @@ export function VerifyDialog({ open, onOpenChange, roomId, roomFingerprint }: Pr
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const u = `${window.location.origin}/r/${roomId}`;
+    const u = `${window.location.origin}/r/#${roomId}`;
     setUrl(u);
     if (canvasRef.current) {
       QRCode.toCanvas(canvasRef.current, u, {
