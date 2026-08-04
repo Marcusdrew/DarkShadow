@@ -310,3 +310,18 @@
   background: linear-gradient(180deg, transparent, oklch(0.72 0.14 55 / 0.06), transparent);
   animation: crt-flicker 4s ease-in-out infinite;
 }
+
+/* Accessibility: respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .crt-flicker::before { animation: none !important; opacity: 0.03; }
+  .scan-lines::after, .scan-lines::before { animation: none !important; opacity: 0.25; }
+  .glitch-text::before, .glitch-text::after { display: none !important; }
+  .pulse-ring::after { animation: none !important; opacity: 0.25; transform: none; }
+  .hex-stream { opacity: 0.25; }
+}
