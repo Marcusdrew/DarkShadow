@@ -168,8 +168,10 @@ function RoomPage() {
   }, [roomId, nav]);
 
   const pushLog = useCallback((text: string, kind: SystemEntry["kind"] = "info") => {
-    logSeq.current += 1;
-    setSystemLog((prev) => [...prev, { id: logSeq.current, text, kind }]);
+    setSystemLog((prev) => {
+      logSeq.current = Math.max(logSeq.current, prev[prev.length - 1]?.id ?? 0) + 1;
+      return [...prev, { id: logSeq.current, text, kind }];
+    });
   }, []);
 
   const showShield = useCallback(() => {
