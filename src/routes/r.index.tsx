@@ -898,6 +898,7 @@ function Message({
         )}
       </div>
       <div
+        style={{ userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
         className={`max-w-[80%] relative rounded-md px-4 py-2 font-serif text-base leading-relaxed overflow-hidden ${
           mine
             ? "bg-primary/15 border border-primary/30 text-bone"
