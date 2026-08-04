@@ -23,9 +23,9 @@ import { alertSound, clickSound, pingSound } from "@/lib/audio";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/r/")({
-  head: ({ params }) => ({
+  head: () => ({
     meta: [
-      { title: `Canal ${params.roomId.slice(0, 8)} — CipherRoom` },
+      { title: "CipherRoom — Canal actif" },
       { name: "description", content: "Salon chiffré éphémère." },
       { name: "robots", content: "noindex, nofollow" },
     ],
@@ -82,8 +82,10 @@ function isCaptureShortcut(e: KeyboardEvent) {
 type SecurityEventType = "capture" | "hidden" | "visible" | "pagehide";
 
 function RoomPage() {
-  const { roomId } = Route.useParams();
   const nav = useNavigate();
+  // The room secret lives in the URL fragment: it never reaches the server.
+  const [roomId, setRoomId] = useState<string | null>(null);
+  const [hashChecked, setHashChecked] = useState(false);
 
   const [booting, setBooting] = useState(true);
   const [identity, setIdentity] = useState<Identity | null>(null);
@@ -114,6 +116,18 @@ function RoomPage() {
 
   // Identity + key
   useEffect(() => {
+    const read = () => {
+      const raw = window.location.hash.replace(/^#/, "").trim();
+      setRoomId(raw ? decodeURIComponent(raw) : null);
+      setHashChecked(true);
+    };
+    read();
+    window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
+  }, []);
+
+  // Identity
+  useEffect(() => {
     let mounted = true;
     (async () => {
       const id = await getIdentity();
@@ -127,6 +141,7 @@ function RoomPage() {
 
   // Load room meta
   useEffect(() => {
+    if (!roomId) return;
     let mounted = true;
     (async () => {
       const { data, error } = await supabase
@@ -135,7 +150,7 @@ function RoomPage() {
         .eq("id", roomId)
         .maybeSingle();
       if (error || !data || new Date(data.expires_at).getTime() <= Date.now()) {
-        nav({ to: "/r/$roomId/expired", params: { roomId } });
+        nav({ to: "/r/expired" });
         return;
       }
       const expectedFp = await computeRoomFp(roomId);
