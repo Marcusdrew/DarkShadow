@@ -87,6 +87,12 @@ export function Oscilloscope({ intensity = 0.4, className = "" }: Props) {
       ctx.stroke();
 
       ctx.shadowBlur = 0;
+      if (
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ) {
+        return;
+      }
       t += 1;
       raf = requestAnimationFrame(draw);
     };

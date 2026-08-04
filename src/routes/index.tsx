@@ -57,8 +57,8 @@ function HomePage() {
       <Oscilloscope className="absolute inset-0 w-full h-full opacity-60" />
 
       {/* Top hex stream */}
-      <HexStream className="absolute top-0 left-0 right-0 h-4 mt-2" />
-      <HexStream className="absolute bottom-0 left-0 right-0 h-4 mb-2" />
+      <HexStream aria-hidden="true" className="absolute top-0 left-0 right-0 h-4 mt-2" />
+      <HexStream aria-hidden="true" className="absolute bottom-0 left-0 right-0 h-4 mb-2" />
 
       {/* Header */}
       <header className="relative z-10 px-6 sm:px-10 py-6 flex items-center justify-between gap-4">
@@ -132,8 +132,13 @@ function HomePage() {
             className="flex gap-2 flex-1"
             onSubmit={(e) => {
               e.preventDefault();
-              const id = joinId.trim();
-              if (id) window.location.href = `/r/${id}`;
+              const raw = joinId.trim();
+              if (!raw) return;
+              // Accept a full invite link (with or without #) or a bare room id.
+              const id = raw.includes("#")
+                ? raw.slice(raw.lastIndexOf("#") + 1).trim()
+                : raw.replace(/^.*\/r\//, "").trim();
+              if (id) window.location.href = `/r/#${id}`;
             }}
           >
             <Input

@@ -22,10 +22,10 @@ import type { Identity } from "@/lib/identity";
 import { alertSound, clickSound, pingSound } from "@/lib/audio";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/r/$roomId")({
-  head: ({ params }) => ({
+export const Route = createFileRoute("/r/")({
+  head: () => ({
     meta: [
-      { title: `Canal ${params.roomId.slice(0, 8)} — CipherRoom` },
+      { title: "CipherRoom — Canal actif" },
       { name: "description", content: "Salon chiffré éphémère." },
       { name: "robots", content: "noindex, nofollow" },
     ],
@@ -82,8 +82,10 @@ function isCaptureShortcut(e: KeyboardEvent) {
 type SecurityEventType = "capture" | "hidden" | "visible" | "pagehide";
 
 function RoomPage() {
-  const { roomId } = Route.useParams();
   const nav = useNavigate();
+  // The room secret lives in the URL fragment: it never reaches the server.
+  const [roomId, setRoomId] = useState<string | null>(null);
+  const [hashChecked, setHashChecked] = useState(false);
 
   const [booting, setBooting] = useState(true);
   const [identity, setIdentity] = useState<Identity | null>(null);
@@ -114,6 +116,18 @@ function RoomPage() {
 
   // Identity + key
   useEffect(() => {
+    const read = () => {
+      const raw = window.location.hash.replace(/^#/, "").trim();
+      setRoomId(raw ? decodeURIComponent(raw) : null);
+      setHashChecked(true);
+    };
+    read();
+    window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
+  }, []);
+
+  // Identity
+  useEffect(() => {
     let mounted = true;
     (async () => {
       const id = await getIdentity();
@@ -127,6 +141,7 @@ function RoomPage() {
 
   // Load room meta
   useEffect(() => {
+    if (!roomId) return;
     let mounted = true;
     (async () => {
       const { data, error } = await supabase
@@ -135,7 +150,7 @@ function RoomPage() {
         .eq("id", roomId)
         .maybeSingle();
       if (error || !data || new Date(data.expires_at).getTime() <= Date.now()) {
-        nav({ to: "/r/$roomId/expired", params: { roomId } });
+        nav({ to: "/r/expired" });
         return;
       }
       const expectedFp = await computeRoomFp(roomId);
@@ -153,8 +168,10 @@ function RoomPage() {
   }, [roomId, nav]);
 
   const pushLog = useCallback((text: string, kind: SystemEntry["kind"] = "info") => {
-    logSeq.current += 1;
-    setSystemLog((prev) => [...prev, { id: logSeq.current, text, kind }]);
+    setSystemLog((prev) => {
+      logSeq.current = Math.max(logSeq.current, prev[prev.length - 1]?.id ?? 0) + 1;
+      return [...prev, { id: logSeq.current, text, kind }];
+    });
   }, []);
 
   const showShield = useCallback(() => {
@@ -208,7 +225,7 @@ function RoomPage() {
 
   // Join + load + realtime
   useEffect(() => {
-    if (!identity || !keyReady || !room) return;
+    if (!identity || !keyReady || !room || !roomId) return;
 
     let cancelled = false;
     joinedRef.current = false;
@@ -235,7 +252,7 @@ function RoomPage() {
         }
         if (message.includes("room_expired")) {
           setRoomClosedReason("expired");
-          nav({ to: "/r/$roomId/expired", params: { roomId } });
+          nav({ to: "/r/expired" });
           return;
         }
         throw joinError;
@@ -360,7 +377,7 @@ function RoomPage() {
           setMessages([]);
           setInput("");
           toast("⏱ Le canal a expiré", { description: "Tous les messages ont été dissipés." });
-          nav({ to: "/r/$roomId/expired", params: { roomId } });
+          nav({ to: "/r/expired" });
           return;
         }
         if (event.type === "capture") {
@@ -404,7 +421,7 @@ function RoomPage() {
 
   // Room expiration
   useEffect(() => {
-    if (!room) return;
+    if (!room || !roomId) return;
     const expireAt = new Date(room.expires_at).getTime();
     const closeRoom = () => {
       setRoomClosedReason("expired");
@@ -418,7 +435,7 @@ function RoomPage() {
           payload: { type: "room_expired", fp: identity.fingerprint, pseudo: identity.pseudo, at: Date.now() },
         });
       }
-      nav({ to: "/r/$roomId/expired", params: { roomId } });
+      nav({ to: "/r/expired" });
     };
     const verifyStillOpen = async () => {
       const { data } = await supabase
@@ -457,6 +474,13 @@ function RoomPage() {
     };
     const onBlur = () => lockShield();
     const onFocus = () => releaseShield(900);
+    const onBeforePrint = () => {
+      lockShield();
+      broadcastSecurity("capture");
+      pushLog("⚠ impression détectée — contenu masqué", "warn");
+      alertSound();
+    };
+    const onAfterPrint = () => releaseShield(900);
     const onPageHide = () => {
       lockShield();
       broadcastSecurity("pagehide");
@@ -476,6 +500,8 @@ function RoomPage() {
     window.addEventListener("blur", onBlur);
     window.addEventListener("focus", onFocus);
     window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("beforeprint", onBeforePrint);
+    window.addEventListener("afterprint", onAfterPrint);
     return () => {
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("keydown", onCaptureKey, true);
@@ -483,6 +509,8 @@ function RoomPage() {
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("beforeprint", onBeforePrint);
+      window.removeEventListener("afterprint", onAfterPrint);
     };
   }, [activateShield, broadcastSecurity, identity, lockShield, pushLog, releaseShield]);
 
@@ -521,7 +549,7 @@ function RoomPage() {
   }, []);
 
   const send = async () => {
-    if (!input.trim() || !keyReady || !identity || !room) return;
+    if (!input.trim() || !keyReady || !identity || !room || !roomId) return;
     if (new Date(room.expires_at).getTime() <= Date.now() || roomClosedReason) {
       setRoomClosedReason("expired");
       toast.error("Canal fermé");
@@ -569,7 +597,8 @@ function RoomPage() {
   };
 
   const copyInvite = async () => {
-    const url = `${window.location.origin}/r/${roomId}`;
+    // The secret stays in the fragment so it never appears in server logs or Referer headers.
+    const url = `${window.location.origin}/r/#${roomId}`;
     await navigator.clipboard.writeText(url);
     toast.success("Lien d'invitation copié");
     pushLog("▸ lien d'invitation copié dans le presse-papiers", "ok");
@@ -583,7 +612,16 @@ function RoomPage() {
 
   if (booting) return <BootSequence onDone={() => setBooting(false)} />;
 
-  if (!room || !identity || !keyReady) {
+  if (hashChecked && !roomId) {
+    return (
+      <ClosedRoomState
+        title="Lien invalide"
+        detail="Ce lien ne contient aucun secret de canal. Demandez une nouvelle invitation."
+      />
+    );
+  }
+
+  if (!room || !identity || !keyReady || !roomId) {
     return (
       <div className="min-h-screen flex items-center justify-center font-mono text-muted-foreground text-sm">
         ◉ établissement du canal…
@@ -862,6 +900,7 @@ function Message({
         )}
       </div>
       <div
+        style={{ userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
         className={`max-w-[80%] relative rounded-md px-4 py-2 font-serif text-base leading-relaxed overflow-hidden ${
           mine
             ? "bg-primary/15 border border-primary/30 text-bone"
