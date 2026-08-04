@@ -22,13 +22,13 @@ export function HexStream({
 
   if (vertical) {
     return (
-      <div className={`hex-stream ${className}`} style={{ writingMode: "vertical-rl" }}>
+      <div aria-hidden="true" className={`hex-stream ${className}`} style={{ writingMode: "vertical-rl" }}>
         <div className="animate-hex-scroll">{repeated}</div>
       </div>
     );
   }
   return (
-    <div className={`hex-stream overflow-hidden ${className}`}>
+    <div aria-hidden="true" className={`hex-stream overflow-hidden ${className}`}>
       <div className="inline-block animate-hex-scroll">{repeated}</div>
     </div>
   );

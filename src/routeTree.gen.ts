@@ -13,6 +13,7 @@ import { Route as NewRouteImport } from './routes/new'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RIndexRouteImport } from './routes/r.index'
+import { Route as RExpiredRouteImport } from './routes/r.expired'
 
 const NewRoute = NewRouteImport.update({
   id: '/new',
@@ -34,17 +35,24 @@ const RIndexRoute = RIndexRouteImport.update({
   path: '/r/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RExpiredRoute = RExpiredRouteImport.update({
+  id: '/r/expired',
+  path: '/r/expired',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/new': typeof NewRoute
+  '/r/expired': typeof RExpiredRoute
   '/r/': typeof RIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/new': typeof NewRoute
+  '/r/expired': typeof RExpiredRoute
   '/r': typeof RIndexRoute
 }
 export interface FileRoutesById {
@@ -52,20 +60,22 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/new': typeof NewRoute
+  '/r/expired': typeof RExpiredRoute
   '/r/': typeof RIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/new' | '/r/'
+  fullPaths: '/' | '/about' | '/new' | '/r/expired' | '/r/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/new' | '/r'
-  id: '__root__' | '/' | '/about' | '/new' | '/r/'
+  to: '/' | '/about' | '/new' | '/r/expired' | '/r'
+  id: '__root__' | '/' | '/about' | '/new' | '/r/expired' | '/r/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   NewRoute: typeof NewRoute
+  RExpiredRoute: typeof RExpiredRoute
   RIndexRoute: typeof RIndexRoute
 }
 
@@ -99,6 +109,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/r/expired': {
+      id: '/r/expired'
+      path: '/r/expired'
+      fullPath: '/r/expired'
+      preLoaderRoute: typeof RExpiredRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -106,6 +123,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   NewRoute: NewRoute,
+  RExpiredRoute: RExpiredRoute,
   RIndexRoute: RIndexRoute,
 }
 export const routeTree = rootRouteImport

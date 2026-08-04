@@ -1,12 +1,10 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Oscilloscope } from "@/components/Oscilloscope";
 import { HexStream } from "@/components/HexStream";
-import { supabase } from "@/integrations/supabase/client";
-import { generateRoomSalt, roomFingerprint } from "@/lib/crypto";
 import { Turnstile } from "@/components/Turnstile";
-import { verifyTurnstile } from "@/lib/turnstile.functions";
+import { createRoom } from "@/lib/rooms.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/new")({
@@ -35,7 +33,6 @@ const TTL_OPTIONS = [
 const MAX_OPTIONS = [2, 4, 8, 16];
 
 function NewRoomPage() {
-  const nav = useNavigate();
   const [roomDuration, setRoomDuration] = useState(60 * 60);
   const [ttl, setTtl] = useState(0);
   const [maxP, setMaxP] = useState(8);
@@ -43,32 +40,32 @@ function NewRoomPage() {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   const handleCreate = async () => {
+    if (!captchaToken) {
+      toast.error("Vérification anti-robot requise");
+      return;
+    }
     setCreating(true);
     try {
-      if (captchaToken) {
-        const check = await verifyTurnstile({ data: { token: captchaToken } });
-        if (!check.success) {
-          toast.error("Vérification anti-robot échouée");
-          setCaptchaToken(null);
-          setCreating(false);
-          return;
-        }
-      }
-      const expiresAt = new Date(Date.now() + roomDuration * 1000).toISOString();
-      // Pre-generate id so we can compute the fingerprint
-      const id = crypto.randomUUID();
-      const fp = await roomFingerprint(id);
-      const salt = generateRoomSalt();
-      const { error } = await supabase.from("rooms").insert({
-        id,
-        expires_at: expiresAt,
-        max_participants: maxP,
-        message_ttl_seconds: ttl,
-        fingerprint: fp,
-        salt,
+      const res = await createRoom({
+        data: {
+          token: captchaToken,
+          durationSeconds: roomDuration,
+          ttlSeconds: ttl,
+          maxParticipants: maxP,
+        },
       });
-      if (error) throw error;
-      nav({ to: "/r/$roomId", params: { roomId: id } });
+      if (!res.ok) {
+        toast.error(
+          res.error === "captcha_failed"
+            ? "Vérification anti-robot échouée"
+            : "Échec de l'ouverture du canal",
+        );
+        setCaptchaToken(null);
+        setCreating(false);
+        return;
+      }
+      // The room secret travels in the URL fragment only.
+      window.location.href = `/r/#${res.roomId}`;
     } catch (e) {
       console.error(e);
       toast.error("Échec de l'ouverture du canal");
@@ -79,8 +76,8 @@ function NewRoomPage() {
   return (
     <div className="relative min-h-screen overflow-hidden scan-lines crt-flicker">
       <Oscilloscope className="absolute inset-0 w-full h-full opacity-30" />
-      <HexStream className="absolute top-0 left-0 right-0 h-3" />
-      <HexStream className="absolute bottom-0 left-0 right-0 h-3" />
+      <HexStream aria-hidden="true" className="absolute top-0 left-0 right-0 h-3" />
+      <HexStream aria-hidden="true" className="absolute bottom-0 left-0 right-0 h-3" />
       <div className="relative z-10 max-w-2xl mx-auto px-6 py-12">
         <a
           href="/"
@@ -122,7 +119,7 @@ function NewRoomPage() {
 
         <Button
           onClick={handleCreate}
-          disabled={creating}
+          disabled={creating || !captchaToken}
           size="lg"
           className="mt-8 h-14 px-10 font-mono tracking-wider text-base"
         >
@@ -130,6 +127,11 @@ function NewRoomPage() {
         </Button>
 
         <Turnstile onToken={setCaptchaToken} className="mt-4" />
+        {!captchaToken && (
+          <p className="mt-2 font-mono text-[10px] text-muted-foreground tracking-widest">
+            ◉ VÉRIFICATION ANTI-ROBOT EN COURS…
+          </p>
+        )}
 
         <div className="mt-12 border-l-2 border-amber-deep/60 pl-4 max-w-md font-serif italic text-xs text-muted-foreground">
           À l'ouverture, vous recevrez un lien et une empreinte. Le lien <em>est</em>
