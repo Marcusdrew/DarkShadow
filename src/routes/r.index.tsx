@@ -711,28 +711,32 @@ function RoomPage() {
             </div>
           </div>
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-1.5 sm:gap-2 items-center shrink-0">
           <AudioToggle />
           <Button
             size="sm"
             variant="outline"
-            className="font-mono text-xs"
+            className="font-mono text-xs px-2 sm:px-3"
             onClick={copyInvite}
+            title="Copier le lien d'invitation"
           >
-            INVITER
+            <span className="hidden sm:inline">INVITER</span>
+            <span className="sm:hidden">⇗</span>
           </Button>
           <Button
             size="sm"
             variant="outline"
-            className="font-mono text-xs"
+            className="font-mono text-xs px-2 sm:px-3"
             onClick={() => setVerifyOpen(true)}
+            title="Vérifier les empreintes"
           >
-            VÉRIFIER
+            <span className="hidden sm:inline">VÉRIFIER</span>
+            <span className="sm:hidden">✓</span>
           </Button>
           <Button
             size="sm"
             variant="destructive"
-            className="font-mono text-xs sm:hidden"
+            className="font-mono text-xs px-2 sm:hidden"
             onClick={triggerPanic}
             title="Effacer et quitter"
           >
@@ -812,18 +816,23 @@ function RoomPage() {
               />
             ))}
             {/* Mobile inline log */}
-            <div className="md:hidden space-y-1">
-              {systemLog.slice(-5).map((l) => (
-                <div
-                  key={l.id}
-                  className={`font-mono text-[10px] italic animate-fade-in-up ${
-                    l.kind === "warn" ? "text-destructive" : "text-amber-deep"
-                  }`}
-                >
-                  {l.text}
+            {systemLog.length > 0 && (
+              <div className="md:hidden rounded-lg border border-border/50 bg-background/50 backdrop-blur px-3 py-2 space-y-1">
+                <div className="font-mono text-[9px] tracking-[0.3em] text-muted-foreground/70">
+                  SYSTEM LOG
                 </div>
-              ))}
-            </div>
+                {systemLog.slice(-4).map((l) => (
+                  <div
+                    key={l.id}
+                    className={`font-mono text-[10px] leading-snug animate-fade-in-up break-words ${
+                      l.kind === "warn" ? "text-destructive" : "text-amber-deep"
+                    }`}
+                  >
+                    {l.text}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Typing indicator */}
@@ -842,8 +851,11 @@ function RoomPage() {
           </div>
 
           {/* Input */}
-          <div className="border-t border-border/60 bg-background/70 backdrop-blur p-3 sm:p-4">
-            <div className="flex gap-2">
+          <div
+            className="border-t border-border/60 bg-background/80 backdrop-blur px-3 pt-3 sm:p-4"
+            style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+          >
+            <div className="flex gap-2 items-end">
               <textarea
                 ref={inputRef}
                 value={input}
@@ -856,23 +868,24 @@ function RoomPage() {
                 }}
                 placeholder="transmettre…"
                 rows={1}
-                className="flex-1 resize-none bg-card/40 border border-border/60 rounded-md px-3 py-2 font-serif text-bone text-sm focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/40"
+                className="flex-1 min-w-0 resize-none bg-card/50 border border-border/60 rounded-2xl px-4 py-2.5 font-serif text-bone text-base sm:text-sm max-h-32 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/40"
               />
               <Button
                 onClick={send}
                 disabled={!input.trim()}
-                className="font-mono tracking-wider self-end"
+                className="font-mono tracking-wider rounded-2xl h-11 w-12 shrink-0"
               >
                 ▸
               </Button>
             </div>
-            <div className="font-mono text-[9px] text-muted-foreground/60 tracking-widest mt-2 flex justify-between">
+            <div className="font-mono text-[9px] text-muted-foreground/60 tracking-widest mt-2 flex justify-between gap-2">
               <span>
                 {room.message_ttl_seconds > 0
                   ? `AUTO-DESTRUCT ${room.message_ttl_seconds}s`
                   : "PERSIST SESSION"}
               </span>
-              <span>CTRL+. = PANIC</span>
+              <span className="hidden sm:inline">CTRL+. = PANIC</span>
+              <span className="sm:hidden">⌧ = PANIC</span>
             </div>
           </div>
         </div>
