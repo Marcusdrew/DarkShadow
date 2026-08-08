@@ -233,16 +233,23 @@ function RoomPage() {
     pushLog(`▸ session ${identity.pseudo} (fp ${identity.fingerprint.slice(0, 8)})`);
 
     const init = async () => {
-      const { error: joinError } = await supabase.from("room_participants").upsert(
-        {
-          room_id: roomId,
-          fingerprint: identity.fingerprint,
-          pseudo: identity.pseudo,
-          pubkey: identity.pubkeyB64,
-          last_seen_at: new Date().toISOString(),
-        },
-        { onConflict: "room_id,fingerprint" },
-      );
+      // Insert d'abord ; si le participant existe déjà (retour dans le canal),
+      // on ne met à jour que last_seen_at (les autres colonnes sont immuables).
+      let { error: joinError } = await supabase.from("room_participants").insert({
+        room_id: roomId,
+        fingerprint: identity.fingerprint,
+        pseudo: identity.pseudo,
+        pubkey: identity.pubkeyB64,
+        last_seen_at: new Date().toISOString(),
+      });
+      if (joinError && joinError.code === "23505") {
+        const { error: touchError } = await supabase
+          .from("room_participants")
+          .update({ last_seen_at: new Date().toISOString() })
+          .eq("room_id", roomId)
+          .eq("fingerprint", identity.fingerprint);
+        joinError = touchError ?? null;
+      }
       if (joinError) {
         const message = joinError.message.toLowerCase();
         if (message.includes("room_participant_limit_reached")) {
