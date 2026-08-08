@@ -64,8 +64,10 @@ function AboutPage() {
           <p>
             Le canal surveille les raccourcis clavier de capture connus (Impr. écran,
             Win+Maj+S, Cmd+Maj+3/4/5), la perte de focus de la fenêtre et les demandes
-            d'impression. Dans ces cas il masque immédiatement le contenu et prévient les
-            autres participants dans le journal du salon.
+            d'impression. Sur mobile (Android, iOS) il surveille en plus les gestes à trois
+            doigts, les superpositions système (barre de capture, bascule d'application) et
+            la mise en arrière-plan de l'onglet. Dans ces cas il masque immédiatement le
+            contenu et prévient les autres participants dans le journal du salon.
           </p>
           <p className="mt-3">
             C'est un <strong>dissuasif, pas un blocage</strong>. Une capture système peut

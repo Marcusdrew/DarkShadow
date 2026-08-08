@@ -492,6 +492,35 @@ function RoomPage() {
       lockShield();
       broadcastSecurity("pagehide");
     };
+    // ---- Mobile (Android / iOS) capture heuristics ----
+    const coarse =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(pointer: coarse)").matches;
+    const mobileCapture = (label: string) => {
+      activateShield(4000);
+      broadcastSecurity("capture");
+      pushLog(`⚠ ${label} — contenu masqué`, "warn");
+      alertSound();
+    };
+    // 3+ doigts : geste de capture (Samsung / Xiaomi / Huawei / iOS AssistiveTouch)
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length >= 3) mobileCapture("geste de capture détecté");
+    };
+    // Barre d'outils de capture / bascule d'app : la hauteur visible change brusquement
+    const vv = window.visualViewport;
+    let baseH = vv?.height ?? window.innerHeight;
+    const onViewport = () => {
+      const h = vv?.height ?? window.innerHeight;
+      const delta = Math.abs(h - baseH);
+      const typing =
+        document.activeElement instanceof HTMLElement &&
+        (document.activeElement.tagName === "TEXTAREA" ||
+          document.activeElement.tagName === "INPUT");
+      baseH = h;
+      if (coarse && !typing && delta > 90) mobileCapture("superposition système détectée");
+    };
+    const onFreeze = () => lockShield();
+    const onResume = () => releaseShield(900);
     const onCaptureKey = (e: KeyboardEvent) => {
       if (!isCaptureShortcut(e)) return;
       e.preventDefault();
@@ -509,6 +538,13 @@ function RoomPage() {
     window.addEventListener("pagehide", onPageHide);
     window.addEventListener("beforeprint", onBeforePrint);
     window.addEventListener("afterprint", onAfterPrint);
+    if (coarse) {
+      window.addEventListener("touchstart", onTouchStart, { passive: true });
+      vv?.addEventListener("resize", onViewport);
+      if (!vv) window.addEventListener("resize", onViewport);
+      document.addEventListener("freeze", onFreeze);
+      document.addEventListener("resume", onResume);
+    }
     return () => {
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("keydown", onCaptureKey, true);
@@ -518,6 +554,11 @@ function RoomPage() {
       window.removeEventListener("pagehide", onPageHide);
       window.removeEventListener("beforeprint", onBeforePrint);
       window.removeEventListener("afterprint", onAfterPrint);
+      window.removeEventListener("touchstart", onTouchStart);
+      vv?.removeEventListener("resize", onViewport);
+      window.removeEventListener("resize", onViewport);
+      document.removeEventListener("freeze", onFreeze);
+      document.removeEventListener("resume", onResume);
     };
   }, [activateShield, broadcastSecurity, identity, lockShield, pushLog, releaseShield]);
 
@@ -670,28 +711,32 @@ function RoomPage() {
             </div>
           </div>
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-1.5 sm:gap-2 items-center shrink-0">
           <AudioToggle />
           <Button
             size="sm"
             variant="outline"
-            className="font-mono text-xs"
+            className="font-mono text-xs px-2 sm:px-3"
             onClick={copyInvite}
+            title="Copier le lien d'invitation"
           >
-            INVITER
+            <span className="hidden sm:inline">INVITER</span>
+            <span className="sm:hidden">⇗</span>
           </Button>
           <Button
             size="sm"
             variant="outline"
-            className="font-mono text-xs"
+            className="font-mono text-xs px-2 sm:px-3"
             onClick={() => setVerifyOpen(true)}
+            title="Vérifier les empreintes"
           >
-            VÉRIFIER
+            <span className="hidden sm:inline">VÉRIFIER</span>
+            <span className="sm:hidden">✓</span>
           </Button>
           <Button
             size="sm"
             variant="destructive"
-            className="font-mono text-xs sm:hidden"
+            className="font-mono text-xs px-2 sm:hidden"
             onClick={triggerPanic}
             title="Effacer et quitter"
           >
@@ -771,18 +816,23 @@ function RoomPage() {
               />
             ))}
             {/* Mobile inline log */}
-            <div className="md:hidden space-y-1">
-              {systemLog.slice(-5).map((l) => (
-                <div
-                  key={l.id}
-                  className={`font-mono text-[10px] italic animate-fade-in-up ${
-                    l.kind === "warn" ? "text-destructive" : "text-amber-deep"
-                  }`}
-                >
-                  {l.text}
+            {systemLog.length > 0 && (
+              <div className="md:hidden rounded-lg border border-border/50 bg-background/50 backdrop-blur px-3 py-2 space-y-1">
+                <div className="font-mono text-[9px] tracking-[0.3em] text-muted-foreground/70">
+                  SYSTEM LOG
                 </div>
-              ))}
-            </div>
+                {systemLog.slice(-4).map((l) => (
+                  <div
+                    key={l.id}
+                    className={`font-mono text-[10px] leading-snug animate-fade-in-up break-words ${
+                      l.kind === "warn" ? "text-destructive" : "text-amber-deep"
+                    }`}
+                  >
+                    {l.text}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Typing indicator */}
@@ -801,8 +851,11 @@ function RoomPage() {
           </div>
 
           {/* Input */}
-          <div className="border-t border-border/60 bg-background/70 backdrop-blur p-3 sm:p-4">
-            <div className="flex gap-2">
+          <div
+            className="border-t border-border/60 bg-background/80 backdrop-blur px-3 pt-3 sm:p-4"
+            style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+          >
+            <div className="flex gap-2 items-end">
               <textarea
                 ref={inputRef}
                 value={input}
@@ -815,23 +868,24 @@ function RoomPage() {
                 }}
                 placeholder="transmettre…"
                 rows={1}
-                className="flex-1 resize-none bg-card/40 border border-border/60 rounded-md px-3 py-2 font-serif text-bone text-sm focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/40"
+                className="flex-1 min-w-0 resize-none bg-card/50 border border-border/60 rounded-2xl px-4 py-2.5 font-serif text-bone text-base sm:text-sm max-h-32 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/40"
               />
               <Button
                 onClick={send}
                 disabled={!input.trim()}
-                className="font-mono tracking-wider self-end"
+                className="font-mono tracking-wider rounded-2xl h-11 w-12 shrink-0"
               >
                 ▸
               </Button>
             </div>
-            <div className="font-mono text-[9px] text-muted-foreground/60 tracking-widest mt-2 flex justify-between">
+            <div className="font-mono text-[9px] text-muted-foreground/60 tracking-widest mt-2 flex justify-between gap-2">
               <span>
                 {room.message_ttl_seconds > 0
                   ? `AUTO-DESTRUCT ${room.message_ttl_seconds}s`
                   : "PERSIST SESSION"}
               </span>
-              <span>CTRL+. = PANIC</span>
+              <span className="hidden sm:inline">CTRL+. = PANIC</span>
+              <span className="sm:hidden">⌧ = PANIC</span>
             </div>
           </div>
         </div>
@@ -908,10 +962,10 @@ function Message({
       </div>
       <div
         style={{ userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
-        className={`max-w-[80%] relative rounded-md px-4 py-2 font-serif text-base leading-relaxed overflow-hidden ${
+        className={`max-w-[85%] sm:max-w-[75%] relative rounded-2xl px-3.5 py-2 font-serif text-[15px] sm:text-base leading-relaxed overflow-hidden break-words whitespace-pre-wrap [overflow-wrap:anywhere] shadow-sm ${
           mine
-            ? "bg-primary/15 border border-primary/30 text-bone"
-            : "bg-card/60 border border-border/60 text-bone"
+            ? "bg-primary/15 border border-primary/30 text-bone rounded-br-sm"
+            : "bg-card/70 border border-border/60 text-bone rounded-bl-sm"
         }`}
       >
         {done ? m.text : <DecryptingText text={m.text} onDone={() => setDone(true)} />}
