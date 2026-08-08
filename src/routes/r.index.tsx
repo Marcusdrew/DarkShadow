@@ -492,6 +492,35 @@ function RoomPage() {
       lockShield();
       broadcastSecurity("pagehide");
     };
+    // ---- Mobile (Android / iOS) capture heuristics ----
+    const coarse =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(pointer: coarse)").matches;
+    const mobileCapture = (label: string) => {
+      activateShield(4000);
+      broadcastSecurity("capture");
+      pushLog(`⚠ ${label} — contenu masqué`, "warn");
+      alertSound();
+    };
+    // 3+ doigts : geste de capture (Samsung / Xiaomi / Huawei / iOS AssistiveTouch)
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length >= 3) mobileCapture("geste de capture détecté");
+    };
+    // Barre d'outils de capture / bascule d'app : la hauteur visible change brusquement
+    const vv = window.visualViewport;
+    let baseH = vv?.height ?? window.innerHeight;
+    const onViewport = () => {
+      const h = vv?.height ?? window.innerHeight;
+      const delta = Math.abs(h - baseH);
+      const typing =
+        document.activeElement instanceof HTMLElement &&
+        (document.activeElement.tagName === "TEXTAREA" ||
+          document.activeElement.tagName === "INPUT");
+      baseH = h;
+      if (coarse && !typing && delta > 90) mobileCapture("superposition système détectée");
+    };
+    const onFreeze = () => lockShield();
+    const onResume = () => releaseShield(900);
     const onCaptureKey = (e: KeyboardEvent) => {
       if (!isCaptureShortcut(e)) return;
       e.preventDefault();
@@ -509,6 +538,13 @@ function RoomPage() {
     window.addEventListener("pagehide", onPageHide);
     window.addEventListener("beforeprint", onBeforePrint);
     window.addEventListener("afterprint", onAfterPrint);
+    if (coarse) {
+      window.addEventListener("touchstart", onTouchStart, { passive: true });
+      vv?.addEventListener("resize", onViewport);
+      if (!vv) window.addEventListener("resize", onViewport);
+      document.addEventListener("freeze", onFreeze);
+      document.addEventListener("resume", onResume);
+    }
     return () => {
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("keydown", onCaptureKey, true);
@@ -518,6 +554,11 @@ function RoomPage() {
       window.removeEventListener("pagehide", onPageHide);
       window.removeEventListener("beforeprint", onBeforePrint);
       window.removeEventListener("afterprint", onAfterPrint);
+      window.removeEventListener("touchstart", onTouchStart);
+      vv?.removeEventListener("resize", onViewport);
+      window.removeEventListener("resize", onViewport);
+      document.removeEventListener("freeze", onFreeze);
+      document.removeEventListener("resume", onResume);
     };
   }, [activateShield, broadcastSecurity, identity, lockShield, pushLog, releaseShield]);
 
