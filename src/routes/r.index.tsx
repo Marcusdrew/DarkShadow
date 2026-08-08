@@ -949,10 +949,10 @@ function Message({
       </div>
       <div
         style={{ userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
-        className={`max-w-[80%] relative rounded-md px-4 py-2 font-serif text-base leading-relaxed overflow-hidden ${
+        className={`max-w-[85%] sm:max-w-[75%] relative rounded-2xl px-3.5 py-2 font-serif text-[15px] sm:text-base leading-relaxed overflow-hidden break-words whitespace-pre-wrap [overflow-wrap:anywhere] shadow-sm ${
           mine
-            ? "bg-primary/15 border border-primary/30 text-bone"
-            : "bg-card/60 border border-border/60 text-bone"
+            ? "bg-primary/15 border border-primary/30 text-bone rounded-br-sm"
+            : "bg-card/70 border border-border/60 text-bone rounded-bl-sm"
         }`}
       >
         {done ? m.text : <DecryptingText text={m.text} onDone={() => setDone(true)} />}
