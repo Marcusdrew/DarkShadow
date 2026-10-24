@@ -21,12 +21,18 @@ import { getIdentity, wipeIdentity } from "@/lib/identity";
 import type { Identity } from "@/lib/identity";
 import { alertSound, clickSound, pingSound } from "@/lib/audio";
 import { toast } from "sonner";
+import { ShieldCheck, Shield } from "lucide-react";
+import { canRevealChannel } from "@/lib/privacy-policy";
 
 export const Route = createFileRoute("/r/")({
   head: () => ({
     meta: [
       { title: "CipherRoom — Canal actif" },
       { name: "description", content: "Salon chiffré éphémère." },
+      { property: "og:title", content: "CipherRoom — Canal actif" },
+      { property: "og:description", content: "Conversation chiffrée dans un canal temporaire CipherRoom." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
@@ -180,17 +186,18 @@ function RoomPage() {
   }, []);
 
   const hideShield = useCallback(() => {
-    if (shieldLocked.current) return;
+    if (shieldLocked.current || !canRevealChannel(document.visibilityState, document.hasFocus())) return;
     document.documentElement.classList.remove("capture-active");
     setShielded(false);
   }, []);
 
   const activateShield = useCallback((hold = SHIELD_HOLD_MS) => {
-    shieldLocked.current = false;
+    shieldLocked.current = true;
     showShield();
     if (shieldTimer.current) clearTimeout(shieldTimer.current);
-    shieldTimer.current = setTimeout(hideShield, hold);
-  }, [hideShield, showShield]);
+    // Capture-related signals never reveal content on a timer.
+    void hold;
+  }, [showShield]);
 
   const lockShield = useCallback(() => {
     shieldLocked.current = true;
@@ -198,10 +205,11 @@ function RoomPage() {
     showShield();
   }, [showShield]);
 
-  const releaseShield = useCallback((hold = 900) => {
+  const resumeChannel = useCallback(() => {
+    if (!canRevealChannel(document.visibilityState, document.hasFocus())) return;
     shieldLocked.current = false;
     if (shieldTimer.current) clearTimeout(shieldTimer.current);
-    shieldTimer.current = setTimeout(hideShield, hold);
+    hideShield();
   }, [hideShield]);
 
   const broadcastSecurity = useCallback((type: SecurityEventType) => {
@@ -221,6 +229,7 @@ function RoomPage() {
   useEffect(() => () => {
     if (shieldTimer.current) clearTimeout(shieldTimer.current);
     document.documentElement.classList.remove("capture-active");
+    document.documentElement.classList.remove("private-channel");
   }, []);
 
   // Join + load + realtime
@@ -388,7 +397,7 @@ function RoomPage() {
           return;
         }
         if (event.type === "capture") {
-          pushLog(`⚠ ${event.pseudo ?? "un poste"} a tenté une capture`, "warn");
+          pushLog(`⚠ protection activée chez ${event.pseudo ?? "un poste"} (capture possible)`, "warn");
           alertSound();
           return;
         }
@@ -467,6 +476,8 @@ function RoomPage() {
   // Visibility + capture shortcut detection
   useEffect(() => {
     if (!identity) return;
+    document.documentElement.classList.add("private-channel");
+    if (!canRevealChannel(document.visibilityState, document.hasFocus())) lockShield();
     const onVis = () => {
       if (document.visibilityState === "hidden") {
         lockShield();
@@ -474,20 +485,20 @@ function RoomPage() {
         pushLog(`⚠ ${identity.pseudo} a quitté la fenêtre (capture possible)`, "warn");
         alertSound();
       } else {
-        releaseShield(900);
         broadcastSecurity("visible");
         pushLog(`▸ ${identity.pseudo} est de retour`, "info");
       }
     };
     const onBlur = () => lockShield();
-    const onFocus = () => releaseShield(900);
+    // Never reveal automatically: the app-switcher or capture preview may still be open.
+    const onFocus = () => {};
     const onBeforePrint = () => {
       lockShield();
       broadcastSecurity("capture");
       pushLog("⚠ impression détectée — contenu masqué", "warn");
       alertSound();
     };
-    const onAfterPrint = () => releaseShield(900);
+    const onAfterPrint = () => lockShield();
     const onPageHide = () => {
       lockShield();
       broadcastSecurity("pagehide");
@@ -497,14 +508,14 @@ function RoomPage() {
       typeof window.matchMedia === "function" &&
       window.matchMedia("(pointer: coarse)").matches;
     const mobileCapture = (label: string) => {
-      activateShield(4000);
+      lockShield();
       broadcastSecurity("capture");
       pushLog(`⚠ ${label} — contenu masqué`, "warn");
       alertSound();
     };
-    // 3+ doigts : geste de capture (Samsung / Xiaomi / Huawei / iOS AssistiveTouch)
+    // Multiple touches are only a possible capture gesture, never proof of a screenshot.
     const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length >= 3) mobileCapture("geste de capture détecté");
+      if (e.touches.length >= 3) mobileCapture("geste multitactile — capture possible");
     };
     // Barre d'outils de capture / bascule d'app : la hauteur visible change brusquement
     const vv = window.visualViewport;
@@ -517,10 +528,18 @@ function RoomPage() {
         (document.activeElement.tagName === "TEXTAREA" ||
           document.activeElement.tagName === "INPUT");
       baseH = h;
-      if (coarse && !typing && delta > 90) mobileCapture("superposition système détectée");
+      if (coarse && !typing && delta > 90) mobileCapture("zone visible modifiée — protection préventive");
     };
     const onFreeze = () => lockShield();
-    const onResume = () => releaseShield(900);
+    const onResume = () => lockShield();
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) lockShield();
+    };
+    const onContextMenu = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest("input, textarea")) return;
+      event.preventDefault();
+    };
     const onCaptureKey = (e: KeyboardEvent) => {
       if (!isCaptureShortcut(e)) return;
       e.preventDefault();
@@ -536,6 +555,8 @@ function RoomPage() {
     window.addEventListener("blur", onBlur);
     window.addEventListener("focus", onFocus);
     window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onPageShow);
+    document.addEventListener("contextmenu", onContextMenu);
     window.addEventListener("beforeprint", onBeforePrint);
     window.addEventListener("afterprint", onAfterPrint);
     if (coarse) {
@@ -552,6 +573,8 @@ function RoomPage() {
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onPageShow);
+      document.removeEventListener("contextmenu", onContextMenu);
       window.removeEventListener("beforeprint", onBeforePrint);
       window.removeEventListener("afterprint", onAfterPrint);
       window.removeEventListener("touchstart", onTouchStart);
@@ -560,7 +583,7 @@ function RoomPage() {
       document.removeEventListener("freeze", onFreeze);
       document.removeEventListener("resume", onResume);
     };
-  }, [activateShield, broadcastSecurity, identity, lockShield, pushLog, releaseShield]);
+  }, [activateShield, broadcastSecurity, identity, lockShield, pushLog]);
 
   // Panic shortcut Ctrl+.
   const triggerPanic = useCallback(() => {
@@ -684,8 +707,8 @@ function RoomPage() {
   return (
     <div className="relative min-h-screen flex flex-col scan-lines crt-flicker overflow-hidden">
       <Oscilloscope intensity={intensity} className="absolute inset-0 w-full h-full opacity-25" />
-      <HexStream className="absolute top-0 left-0 right-0 h-3" />
-      <HexStream className="absolute bottom-0 left-0 right-0 h-3" />
+      <HexStream aria-hidden="true" className="absolute top-0 left-0 right-0 h-3" />
+      <HexStream aria-hidden="true" className="absolute bottom-0 left-0 right-0 h-3" />
 
       {/* Header */}
       <header className="relative z-10 border-b border-border/60 bg-background/70 backdrop-blur px-4 sm:px-6 py-3 flex items-center justify-between gap-2">
@@ -713,6 +736,9 @@ function RoomPage() {
         </div>
         <div className="flex gap-1.5 sm:gap-2 items-center shrink-0">
           <AudioToggle />
+          <Button size="sm" variant="outline" onClick={lockShield} title="Masquer le canal" aria-label="Masquer le canal" className="px-2">
+            <Shield aria-hidden="true" />
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -857,6 +883,7 @@ function RoomPage() {
           >
             <div className="flex gap-2 items-end">
               <textarea
+                aria-label="Message"
                 ref={inputRef}
                 value={input}
                 onChange={(e) => onInputChange(e.target.value)}
@@ -872,7 +899,8 @@ function RoomPage() {
               />
               <Button
                 onClick={send}
-                disabled={!input.trim()}
+                disabled={!input.trim() || shielded}
+                aria-label="Envoyer le message"
                 className="font-mono tracking-wider rounded-2xl h-11 w-12 shrink-0"
               >
                 ▸
@@ -899,13 +927,16 @@ function RoomPage() {
       />
 
       {shielded && (
-        <div className="fixed inset-0 z-[9998] capture-shield flex flex-col items-center justify-center text-center px-6">
-          <div className="font-mono text-xs text-primary tracking-[0.4em] mb-4 breathe">
+        <div role="dialog" aria-modal="true" aria-labelledby="shield-title" className="fixed inset-0 z-[2147483647] capture-shield flex flex-col items-center justify-center text-center px-6">
+          <div id="shield-title" className="font-mono text-xs text-primary tracking-[0.4em] mb-4">
             ◉ CANAL VERROUILLÉ
           </div>
           <div className="font-serif italic text-bone/60 text-sm max-w-xs">
-            Le contenu est masqué tant que la fenêtre n'est pas active.
+            Conversation masquée.
           </div>
+          <Button autoFocus onClick={resumeChannel} className="mt-6 gap-2">
+            <ShieldCheck aria-hidden="true" /> Reprendre le canal
+          </Button>
         </div>
       )}
     </div>

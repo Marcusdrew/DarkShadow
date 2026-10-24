@@ -82,6 +82,7 @@
   --signal-glow: oklch(0.78 0.16 145 / 0.35);
   --amber-deep: oklch(0.55 0.13 50);
   --bone: oklch(0.94 0.018 80);
+  --privacy-mask: oklch(0 0 0);
 }
 
 .dark {
@@ -204,7 +205,7 @@
   }
 
   .capture-shield {
-    background: oklch(0 0 0);
+    background: var(--privacy-mask);
     color: var(--bone);
   }
 
@@ -212,16 +213,37 @@
     visibility: hidden !important;
   }
 
+  .capture-active .capture-shield,
+  .capture-active .capture-shield * {
+    visibility: visible !important;
+  }
+
+  .private-channel body {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  .private-channel input, .private-channel textarea {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
   .capture-active body::before {
     content: "";
     position: fixed;
     inset: 0;
-    z-index: 2147483647;
+    z-index: 2147483646;
     visibility: visible !important;
     opacity: 1;
-    background: oklch(0 0 0);
+    background: var(--privacy-mask);
     mix-blend-mode: normal;
   }
+}
+
+@media print {
+  html.private-channel body { background: var(--privacy-mask) !important; }
+  html.private-channel body * { visibility: hidden !important; }
 }
 
 @keyframes breathe {
