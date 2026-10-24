@@ -7,6 +7,10 @@ export const Route = createFileRoute("/r/expired")({
     meta: [
       { title: "Canal fermé — CipherRoom" },
       { name: "description", content: "Ce canal chiffré s'est refermé." },
+      { property: "og:title", content: "Canal fermé — CipherRoom" },
+      { property: "og:description", content: "Ce canal CipherRoom est fermé. Une nouvelle invitation est nécessaire." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),

@@ -40,8 +40,6 @@ export const Route = createRootRoute({
       { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "CipherRoom" },
       { name: "twitter:description", content: "CipherRoom — salons de discussion anonymes, chiffrés de bout en bout, qui s'effacent." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/78551e40-1c86-42d4-84de-3c885528851b/id-preview-09bffd7e--37c906ad-e357-4440-96a7-017108c9f648.lovable.app-1779317207629.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/78551e40-1c86-42d4-84de-3c885528851b/id-preview-09bffd7e--37c906ad-e357-4440-96a7-017108c9f648.lovable.app-1779317207629.png" },
     ],
     links: [
       {

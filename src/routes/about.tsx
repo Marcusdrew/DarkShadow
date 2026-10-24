@@ -65,9 +65,13 @@ function AboutPage() {
             Le canal surveille les raccourcis clavier de capture connus (Impr. écran,
             Win+Maj+S, Cmd+Maj+3/4/5), la perte de focus de la fenêtre et les demandes
             d'impression. Sur mobile (Android, iOS) il surveille en plus les gestes à trois
-            doigts, les superpositions système (barre de capture, bascule d'application) et
-            la mise en arrière-plan de l'onglet. Dans ces cas il masque immédiatement le
-            contenu et prévient les autres participants dans le journal du salon.
+             doigts, certains changements de zone visible et la mise en arrière-plan de
+             l'onglet. Ce sont des signaux préventifs, pas des preuves de capture : un
+             changement d'orientation peut aussi déclencher le masque. Le contenu est
+             masqué et une alerte de protection est partagée. Après une interruption,
+             le retour à l'application ne révèle pas automatiquement la conversation :
+             une reprise explicite est nécessaire. Un bouton bouclier permet aussi
+             de masquer le canal volontairement.
           </p>
           <p className="mt-3">
             C'est un <strong>dissuasif, pas un blocage</strong>. Une capture système peut
@@ -75,6 +79,13 @@ function AboutPage() {
             navigateur — ne peut empêcher une photo prise avec un autre appareil ni un
             enregistreur d'écran tiers. Considérez tout ce que vous écrivez comme
             potentiellement photographiable par la personne en face.
+          </p>
+          <p className="mt-3">
+            Les boutons physiques de capture sur iOS et Android ne produisent pas
+            d'événement fiable dans une page web. Le masque ne garantit donc ni une
+            capture noire, ni une vignette noire dans le sélecteur d'applications.
+            Le navigateur ne détecte pas non plus de manière fiable un enregistrement
+            d'écran. Aucun message n'est flouté par défaut.
           </p>
         </Section>
 

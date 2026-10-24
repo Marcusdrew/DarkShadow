@@ -12,6 +12,10 @@ export const Route = createFileRoute("/new")({
     meta: [
       { title: "Ouvrir un canal — CipherRoom" },
       { name: "description", content: "Configurer un nouveau salon chiffré éphémère." },
+      { property: "og:title", content: "Ouvrir un canal — CipherRoom" },
+      { property: "og:description", content: "Configurer la durée et les participants d'un canal CipherRoom." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: NewRoomPage,
