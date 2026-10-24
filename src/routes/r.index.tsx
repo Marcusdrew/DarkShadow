@@ -192,11 +192,12 @@ function RoomPage() {
   }, []);
 
   const activateShield = useCallback((hold = SHIELD_HOLD_MS) => {
-    shieldLocked.current = false;
+    shieldLocked.current = true;
     showShield();
     if (shieldTimer.current) clearTimeout(shieldTimer.current);
-    shieldTimer.current = setTimeout(hideShield, hold);
-  }, [hideShield, showShield]);
+    // Capture-related signals never reveal content on a timer.
+    void hold;
+  }, [showShield]);
 
   const lockShield = useCallback(() => {
     shieldLocked.current = true;
@@ -476,6 +477,7 @@ function RoomPage() {
   useEffect(() => {
     if (!identity) return;
     document.documentElement.classList.add("private-channel");
+    if (!canRevealChannel(document.visibilityState, document.hasFocus())) lockShield();
     const onVis = () => {
       if (document.visibilityState === "hidden") {
         lockShield();
