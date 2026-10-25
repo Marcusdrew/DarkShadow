@@ -4,7 +4,8 @@ import { useEffect, useRef } from "react";
 const TEST_SITE_KEY = "1x00000000000000000000AA";
 
 export const TURNSTILE_SITE_KEY =
-  (import.meta.env["VITE_TURNSTILE_SITE_KEY"] as string | undefined) || TEST_SITE_KEY;
+  (import.meta.env["VITE_TURNSTILE_SITE_KEY"] as string | undefined) ||
+  (import.meta.env.DEV ? TEST_SITE_KEY : "");
 
 const SCRIPT_SRC =
   "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";

@@ -14,18 +14,18 @@ import { toast } from "sonner";
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  roomId: string;
+  secret: string;
   roomFingerprint: string;
 }
 
-export function VerifyDialog({ open, onOpenChange, roomId, roomFingerprint }: Props) {
+export function VerifyDialog({ open, onOpenChange, secret, roomFingerprint }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [url, setUrl] = useState("");
   const words = fingerprintToWords(roomFingerprint, 4);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const u = `${window.location.origin}/r/#${roomId}`;
+    const u = `${window.location.origin}/r/#${secret}`;
     setUrl(u);
     if (canvasRef.current) {
       QRCode.toCanvas(canvasRef.current, u, {
@@ -34,7 +34,7 @@ export function VerifyDialog({ open, onOpenChange, roomId, roomFingerprint }: Pr
         color: { dark: "#e8c179", light: "#00000000" },
       }).catch(console.error);
     }
-  }, [open, roomId]);
+  }, [open, secret]);
 
   const copy = async () => {
     await navigator.clipboard.writeText(url);
