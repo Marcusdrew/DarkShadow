@@ -16,6 +16,8 @@ import {
   deriveRoomKey,
   encryptMessage,
   roomFingerprint as computeRoomFp,
+  roomPublicId,
+  isValidRoomSecret,
 } from "@/lib/crypto";
 import { getIdentity, wipeIdentity } from "@/lib/identity";
 import type { Identity } from "@/lib/identity";
@@ -90,6 +92,8 @@ type SecurityEventType = "capture" | "hidden" | "visible" | "pagehide";
 function RoomPage() {
   const nav = useNavigate();
   // The room secret lives in the URL fragment: it never reaches the server.
+  const [secret, setSecret] = useState<string | null>(null);
+  // Public room id (one-way hash of the secret): the only identifier the server ever sees.
   const [roomId, setRoomId] = useState<string | null>(null);
   const [hashChecked, setHashChecked] = useState(false);
 
@@ -124,13 +128,32 @@ function RoomPage() {
   useEffect(() => {
     const read = () => {
       const raw = window.location.hash.replace(/^#/, "").trim();
-      setRoomId(raw ? decodeURIComponent(raw) : null);
+      let decoded = "";
+      try {
+        decoded = raw ? decodeURIComponent(raw) : "";
+      } catch {
+        decoded = "";
+      }
+      setSecret(isValidRoomSecret(decoded) ? decoded : null);
       setHashChecked(true);
     };
     read();
     window.addEventListener("hashchange", read);
     return () => window.removeEventListener("hashchange", read);
   }, []);
+
+  // Derive the public room id from the secret
+  useEffect(() => {
+    let mounted = true;
+    setRoomId(null);
+    if (!secret) return;
+    roomPublicId(secret).then((id) => {
+      if (mounted) setRoomId(id);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [secret]);
 
   // Identity
   useEffect(() => {
@@ -147,7 +170,7 @@ function RoomPage() {
 
   // Load room meta
   useEffect(() => {
-    if (!roomId) return;
+    if (!roomId || !secret) return;
     let mounted = true;
     (async () => {
       const { data, error } = await supabase
@@ -159,11 +182,15 @@ function RoomPage() {
         nav({ to: "/r/expired" });
         return;
       }
-      const expectedFp = await computeRoomFp(roomId);
+      const expectedFp = await computeRoomFp(secret);
       if (data.fingerprint !== expectedFp) {
         toast.error("Empreinte du salon invalide");
       }
-      const k = await deriveRoomKey(roomId, data.salt);
+      if (!data.salt) {
+        nav({ to: "/r/expired" });
+        return;
+      }
+      const k = await deriveRoomKey(secret, data.salt);
       if (!mounted) return;
       setKeyReady(k);
       setRoom(data as RoomMeta);
@@ -171,7 +198,7 @@ function RoomPage() {
     return () => {
       mounted = false;
     };
-  }, [roomId, nav]);
+  }, [roomId, secret, nav]);
 
   const pushLog = useCallback((text: string, kind: SystemEntry["kind"] = "info") => {
     setSystemLog((prev) => {
@@ -669,7 +696,7 @@ function RoomPage() {
 
   const copyInvite = async () => {
     // The secret stays in the fragment so it never appears in server logs or Referer headers.
-    const url = `${window.location.origin}/r/#${roomId}`;
+    const url = `${window.location.origin}/r/#${secret}`;
     await navigator.clipboard.writeText(url);
     toast.success("Lien d'invitation copié");
     pushLog("▸ lien d'invitation copié dans le presse-papiers", "ok");
@@ -683,7 +710,7 @@ function RoomPage() {
 
   if (booting) return <BootSequence onDone={() => setBooting(false)} />;
 
-  if (hashChecked && !roomId) {
+  if (hashChecked && !secret) {
     return (
       <ClosedRoomState
         title="Lien invalide"
@@ -692,7 +719,7 @@ function RoomPage() {
     );
   }
 
-  if (!room || !identity || !keyReady || !roomId) {
+  if (!room || !identity || !keyReady || !roomId || !secret) {
     return (
       <div className="min-h-screen flex items-center justify-center font-mono text-muted-foreground text-sm">
         ◉ établissement du canal…
@@ -922,7 +949,7 @@ function RoomPage() {
       <VerifyDialog
         open={verifyOpen}
         onOpenChange={setVerifyOpen}
-        roomId={roomId}
+        secret={secret}
         roomFingerprint={room.fingerprint}
       />
 
