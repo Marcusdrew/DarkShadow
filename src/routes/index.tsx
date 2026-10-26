@@ -84,7 +84,7 @@ function HomePage() {
         <span>UTC {now ? now.toISOString().slice(11, 19) : "--:--:--"}</span>
         <span>LAT {coords?.lat ?? "--"}° · LON {coords?.lon ?? "--"}°</span>
         <span className="flex items-center gap-2">SIG <SignalMeter /></span>
-        <span className="text-signal">◉ NO LOGS</span>
+        <span className="text-signal">◉ NO ACCOUNT</span>
       </div>
 
       {/* Main */}
