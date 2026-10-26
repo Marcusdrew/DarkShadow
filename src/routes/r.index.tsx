@@ -10,7 +10,7 @@ import { AudioToggle } from "@/components/AudioToggle";
 import { TypingWaveform } from "@/components/TypingWaveform";
 import { PanicOverlay } from "@/components/PanicOverlay";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/external";
 import {
   decryptMessage,
   deriveRoomKey,
