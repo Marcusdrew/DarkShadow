@@ -27,10 +27,10 @@ export const createRoom = createServerFn({ method: "POST" })
       return { ok: false as const, error: "captcha_failed" };
     }
     const { generateRoomSaltServer, roomFingerprintServer } = await import("./rooms.server");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { createExternalAdmin } = await import("@/integrations/supabase/external.server");
 
     const id = crypto.randomUUID();
-    const { error } = await supabaseAdmin.from("rooms").insert({
+    const { error } = await createExternalAdmin().from("rooms").insert({
       id,
       expires_at: new Date(Date.now() + data.durationSeconds * 1000).toISOString(),
       max_participants: data.maxParticipants,
