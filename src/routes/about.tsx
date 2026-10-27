@@ -47,8 +47,8 @@ function AboutPage() {
         <Section title="Ce que CipherRoom protège">
           <ul className="space-y-2 list-disc list-inside">
             <li>Le contenu de vos messages : chiffré côté navigateur (AES-256-GCM) avant envoi.</li>
-            <li>Votre identité : aucune inscription, pseudo généré, clés en mémoire de session.</li>
-            <li>L'historique : les salons et messages s'auto-effacent à expiration.</li>
+            <li>Votre identité : aucune inscription, pseudo généré aléatoirement. Les pseudos et empreintes ne sont pas authentifiés : un participant malveillant peut en usurper un autre.</li>
+            <li>L'historique : les salons et messages s'auto-effacent à expiration. Le serveur et son hébergeur conservent toutefois des journaux techniques de requêtes (adresse IP, horaires) hors de notre contrôle.</li>
           </ul>
         </Section>
 
@@ -57,6 +57,7 @@ function AboutPage() {
             <li>Un appareil compromis (malware, keylogger).</li>
             <li>Le partage du lien d'invitation à un tiers — quiconque l'a peut entrer.</li>
             <li>Le Perfect Forward Secrecy avancé (Signal le fait, pas nous).</li>
+            <li>Les métadonnées : durée, nombre de participants, heures et taille des messages, pseudos et empreintes sont visibles côté serveur.</li>
           </ul>
         </Section>
 
@@ -91,19 +92,21 @@ function AboutPage() {
 
         <Section title="Modèle technique">
           <p>
-            Chaque salon est identifié par un UUID v4 servant de <em>secret partagé</em> :
-            le lien d'invitation le transporte dans le <em>fragment</em> de l'URL
-            (après le <code>#</code>), qui n'est jamais envoyé au serveur, ni dans les
-            journaux d'hébergement, ni dans l'en-tête Referer. Une clé AES-256-GCM est
-            dérivée de ce secret via PBKDF2 (100 000 itérations) avec un sel aléatoire
-            propre au salon. Tous les messages sont chiffrés dans le navigateur avant
-            d'être envoyés. Le serveur ne stocke que des cryptogrammes, des vecteurs
-            d'initialisation et des empreintes publiques.
+            Chaque salon repose sur un <em>secret aléatoire de 256 bits</em> généré dans
+            votre navigateur. Le lien d'invitation le transporte dans le <em>fragment</em>
+            de l'URL (après le <code>#</code>), qui n'est envoyé ni au serveur, ni aux
+            journaux d'hébergement, ni dans l'en-tête Referer. Le serveur ne reçoit
+            qu'un identifiant public, empreinte à sens unique (SHA-256) de ce secret :
+            il ne peut pas en déduire la clé. Une clé AES-256-GCM est dérivée du secret via
+            PBKDF2 (100 000 itérations) avec un sel aléatoire propre au salon. Tous les
+            messages sont chiffrés dans le navigateur avant d'être envoyés. Le serveur
+            ne stocke que des cryptogrammes, des vecteurs d'initialisation, des pseudos
+            et des empreintes publiques.
           </p>
           <p className="mt-3">
-            Votre identité de session est une paire de clés ECDSA P-256 générée localement.
-            L'empreinte publique (16 caractères hex) est partagée pour vérification entre
-            participants.
+            Votre identité de session est une paire de clés ECDSA P-256 générée localement,
+            dont seule l'empreinte publique (16 caractères hex) est partagée. Les messages
+            ne sont pas signés : l'empreinte sert d'étiquette, pas de preuve d'identité.
           </p>
         </Section>
 

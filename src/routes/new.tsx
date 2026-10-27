@@ -5,6 +5,7 @@ import { Oscilloscope } from "@/components/Oscilloscope";
 import { HexStream } from "@/components/HexStream";
 import { Turnstile } from "@/components/Turnstile";
 import { createRoom } from "@/lib/rooms.functions";
+import { generateRoomSecret, roomPublicId, roomFingerprint } from "@/lib/crypto";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/new")({
@@ -50,9 +51,13 @@ function NewRoomPage() {
     }
     setCreating(true);
     try {
+      // The secret never leaves the browser: only its one-way public id/fingerprint are sent.
+      const secret = generateRoomSecret();
       const res = await createRoom({
         data: {
           token: captchaToken,
+          publicId: await roomPublicId(secret),
+          fingerprint: await roomFingerprint(secret),
           durationSeconds: roomDuration,
           ttlSeconds: ttl,
           maxParticipants: maxP,
@@ -69,7 +74,7 @@ function NewRoomPage() {
         return;
       }
       // The room secret travels in the URL fragment only.
-      window.location.href = `/r/#${res.roomId}`;
+      window.location.href = `/r/#${secret}`;
     } catch (e) {
       console.error(e);
       toast.error("Échec de l'ouverture du canal");

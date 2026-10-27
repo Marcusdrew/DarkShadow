@@ -1,12 +1,14 @@
 /**
  * CipherRoom crypto utilities.
  *
- * Hybrid model:
- * - Each room has a symmetric AES-GCM key derived from the room id (shared secret in URL)
- *   plus a random salt published with the room. Anyone with the URL can decrypt.
- * - Each participant generates an ECDSA keypair for identity (fingerprint).
- *
- * NOTE: This is "simple E2EE" — the room id IS the shared secret. Server never sees plaintext.
+ * Model:
+ * - Each room has a random 256-bit SECRET that only lives in the URL fragment (#...).
+ *   It is never sent to the server.
+ * - The server only sees a PUBLIC room id = truncated SHA-256 of the secret (one-way),
+ *   formatted as a UUID. It cannot recover the secret nor derive the key.
+ * - The AES-GCM key is derived (PBKDF2) from the secret and a per-room salt.
+ * - Each participant generates an ECDSA keypair for a display fingerprint. Messages are
+ *   NOT signed: pseudos/fingerprints are not authenticated (see /about).
  */
 
 const enc = new TextEncoder();
@@ -40,8 +42,23 @@ export async function sha256(input: string | Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(hash);
 }
 
-/** Legacy salt, kept for rooms created before per-room salts existed. */
-const LEGACY_SALT = "cipherroom:v1:salt";
+/** Generate a random room secret (256 bits, base64url, 43 chars). Lives in the URL fragment only. */
+export function generateRoomSecret(): string {
+  return toB64(crypto.getRandomValues(new Uint8Array(32)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+export function isValidRoomSecret(s: string): boolean {
+  return /^[A-Za-z0-9_-]{43}$/.test(s);
+}
+
+/** Public room id sent to the server: SHA-256("cipherroom:id:" + secret), 128 bits, as a UUID-shaped string. */
+export async function roomPublicId(secret: string): Promise<string> {
+  const h = toHex(await sha256("cipherroom:id:" + secret)).slice(0, 32);
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
 
 /** Generate a random, per-room PBKDF2 salt (base64). Salts need not be secret, only unique. */
 export function generateRoomSalt(): string {
@@ -49,17 +66,18 @@ export function generateRoomSalt(): string {
 }
 
 /**
- * Derive an AES-GCM CryptoKey from the room id (shared secret) and the room's salt.
- * `salt` is the base64 value stored with the room; null/undefined falls back to the legacy salt.
+ * Derive an AES-GCM CryptoKey from the room secret and the room's salt.
+ * `salt` is the base64 value stored with the room (required).
  */
 export async function deriveRoomKey(
-  roomId: string,
-  salt?: string | null,
+  secret: string,
+  salt: string,
 ): Promise<CryptoKey> {
-  const saltBytes: Uint8Array = salt ? fromB64(salt) : enc.encode(LEGACY_SALT);
+  if (!salt) throw new Error("missing_room_salt");
+  const saltBytes: Uint8Array = fromB64(salt);
   const baseKey = await crypto.subtle.importKey(
     "raw",
-    enc.encode(roomId),
+    enc.encode("cipherroom:key:" + secret),
     "PBKDF2",
     false,
     ["deriveKey"],
@@ -106,9 +124,9 @@ export async function decryptMessage(
   return dec.decode(pt);
 }
 
-/** Compute the room fingerprint (public, shareable) from the room id. */
-export async function roomFingerprint(roomId: string): Promise<string> {
-  const h = await sha256("cipherroom:fp:" + roomId);
+/** Compute the room fingerprint (public, shareable) from the room secret. */
+export async function roomFingerprint(secret: string): Promise<string> {
+  const h = await sha256("cipherroom:fp:" + secret);
   return toHex(h).slice(0, 16);
 }
 
