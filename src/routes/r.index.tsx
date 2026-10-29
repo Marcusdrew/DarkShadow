@@ -26,7 +26,7 @@ import { getIdentity, wipeIdentity } from "@/lib/identity";
 import type { Identity } from "@/lib/identity";
 import { alertSound, clickSound, pingSound } from "@/lib/audio";
 import { toast } from "sonner";
-import { ShieldCheck, Shield } from "lucide-react";
+import { ShieldCheck, Shield, LogOut, Calculator, Send, Link as LinkIcon } from "lucide-react";
 import { canRevealChannel } from "@/lib/privacy-policy";
 
 export const Route = createFileRoute("/r/")({
@@ -117,6 +117,7 @@ function RoomPage() {
   const [panic, setPanic] = useState(false);
   const [boost, setBoost] = useState(0);
   const [shielded, setShielded] = useState(false);
+  const [sending, setSending] = useState(false);
   const [roomClosedReason, setRoomClosedReason] = useState<"expired" | "full" | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -552,19 +553,8 @@ function RoomPage() {
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length >= 3) mobileCapture("geste multitactile — capture possible");
     };
-    // Barre d'outils de capture / bascule d'app : la hauteur visible change brusquement
-    const vv = window.visualViewport;
-    let baseH = vv?.height ?? window.innerHeight;
-    const onViewport = () => {
-      const h = vv?.height ?? window.innerHeight;
-      const delta = Math.abs(h - baseH);
-      const typing =
-        document.activeElement instanceof HTMLElement &&
-        (document.activeElement.tagName === "TEXTAREA" ||
-          document.activeElement.tagName === "INPUT");
-      baseH = h;
-      if (coarse && !typing && delta > 90) mobileCapture("zone visible modifiée — protection préventive");
-    };
+    // Keyboard and browser chrome resize the viewport during normal messaging.
+    // Resizing alone is not a capture signal; lifecycle interruptions still mask immediately.
     const onFreeze = () => lockShield();
     const onResume = () => lockShield();
     const onPageShow = (event: PageTransitionEvent) => {
@@ -596,8 +586,6 @@ function RoomPage() {
     window.addEventListener("afterprint", onAfterPrint);
     if (coarse) {
       window.addEventListener("touchstart", onTouchStart, { passive: true });
-      vv?.addEventListener("resize", onViewport);
-      if (!vv) window.addEventListener("resize", onViewport);
       document.addEventListener("freeze", onFreeze);
       document.addEventListener("resume", onResume);
     }
@@ -613,12 +601,45 @@ function RoomPage() {
       window.removeEventListener("beforeprint", onBeforePrint);
       window.removeEventListener("afterprint", onAfterPrint);
       window.removeEventListener("touchstart", onTouchStart);
-      vv?.removeEventListener("resize", onViewport);
-      window.removeEventListener("resize", onViewport);
       document.removeEventListener("freeze", onFreeze);
       document.removeEventListener("resume", onResume);
     };
   }, [activateShield, broadcastSecurity, identity, lockShield, pushLog]);
+
+  // Keep the composer inside the visible area, including while the mobile keyboard is open.
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const update = () => {
+      document.documentElement.style.setProperty("--channel-height", `${viewport?.height ?? window.innerHeight}px`);
+      document.documentElement.style.setProperty("--channel-top", `${viewport?.offsetTop ?? 0}px`);
+    };
+    update();
+    viewport?.addEventListener("resize", update);
+    viewport?.addEventListener("scroll", update);
+    window.addEventListener("resize", update);
+    return () => {
+      viewport?.removeEventListener("resize", update);
+      viewport?.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+      document.documentElement.style.removeProperty("--channel-height");
+      document.documentElement.style.removeProperty("--channel-top");
+    };
+  }, []);
+
+  const leaveChannel = () => {
+    joinedRef.current = false;
+    if (channelRef.current) {
+      void supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+    try { sessionStorage.removeItem(ROOM_SECRET_KEY); } catch { /* unavailable storage */ }
+    setMessages([]);
+    setInput("");
+    setSecret(null);
+    shieldLocked.current = false;
+    document.documentElement.classList.remove("capture-active");
+    void nav({ to: "/" });
+  };
 
   // Panic shortcut Ctrl+.
   const triggerPanic = useCallback(() => {
@@ -655,13 +676,14 @@ function RoomPage() {
   }, []);
 
   const send = async () => {
-    if (!input.trim() || !keyReady || !identity || !room || !roomId) return;
+    if (sending || shielded || !input.trim() || !keyReady || !identity || !room || !roomId) return;
     if (new Date(room.expires_at).getTime() <= Date.now() || roomClosedReason) {
       setRoomClosedReason("expired");
       toast.error("Canal fermé");
       return;
     }
     const text = input;
+    setSending(true);
     setInput("");
     pulse();
     clickSound();
@@ -706,6 +728,8 @@ function RoomPage() {
       console.error(e);
       toast.error("Échec de l'envoi");
       setInput(text);
+    } finally {
+      setSending(false);
     }
   };
 
@@ -762,13 +786,13 @@ function RoomPage() {
     .map((p) => p.pseudo);
 
   return (
-    <div className="relative min-h-screen flex flex-col scan-lines crt-flicker overflow-hidden">
+    <div className="fixed inset-x-0 top-[var(--channel-top,0px)] h-[var(--channel-height,100dvh)] flex flex-col scan-lines crt-flicker overflow-hidden">
       <Oscilloscope intensity={intensity} className="absolute inset-0 w-full h-full opacity-25" />
       <HexStream aria-hidden="true" className="absolute top-0 left-0 right-0 h-3" />
       <HexStream aria-hidden="true" className="absolute bottom-0 left-0 right-0 h-3" />
 
       {/* Header */}
-      <header className="relative z-10 border-b border-border/60 bg-background/70 backdrop-blur px-4 sm:px-6 py-3 flex items-center justify-between gap-2">
+      <header className="relative z-10 shrink-0 border-b border-border/60 bg-background/70 backdrop-blur px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <div className="relative w-2 h-2 rounded-full bg-signal pulse-ring shrink-0" />
           <div className="font-mono text-[10px] tracking-[0.3em] text-signal breathe shrink-0 hidden sm:block">
@@ -781,7 +805,7 @@ function RoomPage() {
                 {room.fingerprint.slice(0, 8)}
               </span>
             </div>
-            <div className="font-mono text-[10px] text-muted-foreground flex items-center gap-2">
+            <div className="font-mono text-[10px] text-muted-foreground flex items-center gap-2 whitespace-nowrap">
               <span>{participants.length}/{room.max_participants}</span>
               <span>·</span>
               <RoomExpiry iso={room.expires_at} />
@@ -791,27 +815,32 @@ function RoomPage() {
             </div>
           </div>
         </div>
-        <div className="flex gap-1.5 sm:gap-2 items-center shrink-0">
-          <AudioToggle />
-          <Button size="sm" variant="outline" onClick={lockShield} title="Masquer le canal" aria-label="Masquer le canal" className="px-2">
+        <Button size="sm" variant="outline" onClick={leaveChannel} className="sm:order-last gap-2" aria-label="Sortir du canal">
+          <LogOut aria-hidden="true" /> Sortir
+        </Button>
+        <div className="flex w-full sm:w-auto gap-2 items-center shrink-0">
+          <AudioToggle compact />
+          <Button size="sm" variant="outline" onClick={lockShield} title="Masquer le canal" aria-label="Masquer le canal" className="h-10 w-10 p-0">
             <Shield aria-hidden="true" />
           </Button>
           <Button
             size="sm"
             variant="outline"
-            className="font-mono text-xs px-2 sm:px-3"
+            className="font-mono text-xs h-10 px-3"
             onClick={copyInvite}
             title="Copier le lien d'invitation"
+            aria-label="Copier le lien d'invitation"
           >
             <span className="hidden sm:inline">INVITER</span>
-            <span className="sm:hidden">⇗</span>
+            <LinkIcon className="sm:hidden" aria-hidden="true" />
           </Button>
           <Button
             size="sm"
             variant="outline"
-            className="font-mono text-xs px-2 sm:px-3"
+            className="font-mono text-xs h-10 px-3"
             onClick={() => setVerifyOpen(true)}
             title="Vérifier les empreintes"
+            aria-label="Vérifier les empreintes"
           >
             <span className="hidden sm:inline">VÉRIFIER</span>
             <span className="sm:hidden">✓</span>
@@ -819,11 +848,12 @@ function RoomPage() {
           <Button
             size="sm"
             variant="destructive"
-            className="font-mono text-xs px-2 sm:hidden"
+            className="font-mono text-xs h-10 px-3 ml-auto sm:ml-0"
             onClick={triggerPanic}
-            title="Effacer et quitter"
+            title="Mode panique : calculatrice"
+            aria-label="Mode panique : calculatrice"
           >
-            ⌧
+            <Calculator aria-hidden="true" />
           </Button>
         </div>
       </header>
@@ -883,8 +913,8 @@ function RoomPage() {
         </aside>
 
         {/* Chat */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-3">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
+          <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-6 py-4 space-y-3">
             {messages.length === 0 && (
               <div className="font-serif italic text-muted-foreground text-center py-12">
                 Le canal est ouvert. Premier signal en attente…
@@ -900,10 +930,10 @@ function RoomPage() {
             ))}
             {/* Mobile inline log */}
             {systemLog.length > 0 && (
-              <div className="md:hidden rounded-lg border border-border/50 bg-background/50 backdrop-blur px-3 py-2 space-y-1">
-                <div className="font-mono text-[9px] tracking-[0.3em] text-muted-foreground/70">
-                  SYSTEM LOG
-                </div>
+              <details className="md:hidden border-t border-border/50 py-2 space-y-1">
+                <summary className="font-mono text-[10px] text-muted-foreground cursor-pointer">
+                  Activité du canal
+                </summary>
                 {systemLog.slice(-4).map((l) => (
                   <div
                     key={l.id}
@@ -914,12 +944,12 @@ function RoomPage() {
                     {l.text}
                   </div>
                 ))}
-              </div>
+              </details>
             )}
           </div>
 
           {/* Typing indicator */}
-          <div className="px-4 sm:px-6 h-6 flex items-center gap-3">
+          <div className="px-4 sm:px-6 h-6 shrink-0 flex items-center gap-3 overflow-hidden">
             {typingNames.length > 0 && (
               <>
                 <div className="w-16 h-4">
@@ -935,7 +965,7 @@ function RoomPage() {
 
           {/* Input */}
           <div
-            className="border-t border-border/60 bg-background/80 backdrop-blur px-3 pt-3 sm:p-4"
+            className="shrink-0 border-t border-border/60 bg-background/80 backdrop-blur px-3 pt-3 sm:p-4"
             style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
           >
             <div className="flex gap-2 items-end">
@@ -953,15 +983,17 @@ function RoomPage() {
                 }}
                 placeholder="transmettre…"
                 rows={1}
-                className="flex-1 min-w-0 resize-none bg-card/50 border border-border/60 rounded-2xl px-4 py-2.5 font-serif text-bone text-base sm:text-sm max-h-32 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/40"
+                className="flex-1 min-w-0 resize-none bg-card/50 border border-border/60 rounded-md px-3 py-2.5 font-serif text-bone text-base max-h-32 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/40"
               />
               <Button
+                type="button"
+                onPointerDown={(event) => event.preventDefault()}
                 onClick={send}
-                disabled={!input.trim() || shielded}
+                disabled={!input.trim() || shielded || sending}
                 aria-label="Envoyer le message"
-                className="font-mono tracking-wider rounded-2xl h-11 w-12 shrink-0"
+                className="font-mono h-11 w-12 shrink-0 rounded-md"
               >
-                ▸
+                <Send aria-hidden="true" />
               </Button>
             </div>
             <div className="font-mono text-[9px] text-muted-foreground/60 tracking-widest mt-2 flex justify-between gap-2">
@@ -971,7 +1003,6 @@ function RoomPage() {
                   : "PERSIST SESSION"}
               </span>
               <span className="hidden sm:inline">CTRL+. = PANIC</span>
-              <span className="sm:hidden">⌧ = PANIC</span>
             </div>
           </div>
         </div>
@@ -1051,7 +1082,7 @@ function Message({
       </div>
       <div
         style={{ userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
-        className={`max-w-[85%] sm:max-w-[75%] relative rounded-2xl px-3.5 py-2 font-serif text-[15px] sm:text-base leading-relaxed overflow-hidden break-words whitespace-pre-wrap [overflow-wrap:anywhere] shadow-sm ${
+        className={`max-w-[85%] sm:max-w-[75%] relative rounded-md px-3.5 py-2 font-serif text-[15px] sm:text-base leading-relaxed overflow-hidden break-words whitespace-pre-wrap [overflow-wrap:anywhere] shadow-sm ${
           mine
             ? "bg-primary/15 border border-primary/30 text-bone rounded-br-sm"
             : "bg-card/70 border border-border/60 text-bone rounded-bl-sm"

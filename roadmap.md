@@ -1,5 +1,7 @@
 # CipherRoom
 
+- [ ] Corriger l'affichage mobile et le faux verrouillage à l'envoi ; ajouter une sortie distincte du mode panique.
+
 - [x] Renforcer le masque mobile sans promettre le blocage des captures système.
 - [ ] Vérifier le masque et la reprise dans un vrai canal — bloqué : création échouée et lecture Lovable Cloud indisponible ; règles de reprise testées séparément.
 - [x] Livrer une documentation française : fonctionnement, limites et pistes de vente.
