@@ -54,7 +54,7 @@
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.575.0",
-    "nitro": "^3.0.260903-beta",
+    "nitro": "3.0.260603-beta",
     "qrcode": "^1.5.4",
     "react": "^19.2.0",
     "react-day-picker": "^9.14.0",
@@ -87,5 +87,9 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
     "vite": "^7.3.1"
+  },
+  "overrides": {
+    "undici": "^7.30.1",
+    "sharp": "^0.35.5"
   }
 }
