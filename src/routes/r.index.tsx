@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Oscilloscope } from "@/components/Oscilloscope";
 import { HexStream } from "@/components/HexStream";
 import { BootSequence } from "@/components/BootSequence";
@@ -1016,7 +1017,7 @@ function RoomPage() {
         roomFingerprint={room.fingerprint}
       />
 
-      {shielded && (
+      {shielded && createPortal(
         <div role="dialog" aria-modal="true" aria-labelledby="shield-title" className="fixed inset-0 z-[2147483647] capture-shield flex flex-col items-center justify-center text-center px-6">
           <div id="shield-title" className="font-mono text-xs text-primary tracking-[0.4em] mb-4">
             ◉ CANAL VERROUILLÉ
@@ -1027,7 +1028,7 @@ function RoomPage() {
           <Button autoFocus onClick={resumeChannel} className="mt-6 gap-2">
             <ShieldCheck aria-hidden="true" /> Reprendre le canal
           </Button>
-        </div>
+        </div>, document.body
       )}
     </div>
   );
