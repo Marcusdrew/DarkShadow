@@ -104,6 +104,7 @@ function RoomPage() {
   const [hashChecked, setHashChecked] = useState(false);
 
   const [booting, setBooting] = useState(true);
+  const finishBoot = useCallback(() => setBooting(false), []);
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [room, setRoom] = useState<RoomMeta | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -762,7 +763,7 @@ function RoomPage() {
     return <ClosedRoomState title="Canal complet" detail="La limite de participants définie pour ce canal est atteinte." />;
   }
 
-  if (booting) return <BootSequence onDone={() => setBooting(false)} />;
+  if (booting) return <BootSequence onDone={finishBoot} />;
 
   if (hashChecked && !secret) {
     return (
