@@ -21,7 +21,7 @@ interface Props {
 export function VerifyDialog({ open, onOpenChange, secret, roomFingerprint }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [url, setUrl] = useState("");
-  const words = fingerprintToWords(roomFingerprint, 4);
+  const words = fingerprintToWords(roomFingerprint, 8);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

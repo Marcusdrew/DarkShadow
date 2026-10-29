@@ -47,7 +47,7 @@ function AboutPage() {
         <Section title="Ce que CipherRoom protège">
           <ul className="space-y-2 list-disc list-inside">
             <li>Le contenu de vos messages : chiffré côté navigateur (AES-256-GCM) avant envoi.</li>
-            <li>Votre identité : aucune inscription, pseudo généré aléatoirement. Les pseudos et empreintes ne sont pas authentifiés : un participant malveillant peut en usurper un autre.</li>
+            <li>Votre identité : aucune inscription, pseudo dérivé de votre empreinte. Chaque message est signé avec votre clé de session : personne ne peut écrire en votre nom.</li>
             <li>L'historique : les salons et messages s'auto-effacent à expiration. Le serveur et son hébergeur conservent toutefois des journaux techniques de requêtes (adresse IP, horaires) hors de notre contrôle.</li>
           </ul>
         </Section>
@@ -104,10 +104,12 @@ function AboutPage() {
             et des empreintes publiques.
           </p>
           <p className="mt-3">
-            Votre identité de session est une paire de clés ECDSA P-256 générée localement,
-            dont seule l'empreinte publique (16 caractères hex) est partagée. Les messages
-            ne sont pas signés : l'empreinte sert d'étiquette, pas de preuve d'identité.
-          </p>
+            Votre identité de session est une paire de clés ECDSA P-256 générée localement.
+            Votre empreinte (16 caractères hex) est l'empreinte SHA-256 de votre clé publique, et
+            chaque message est signé avec votre clé privée. Les autres participants vérifient
+            la signature et ignorent tout message qui n'est pas signé par un participant du salon.
+            La base de données n'est accessible qu'à travers des fonctions qui exigent
+            l'identifiant du salon : il est impossible de lister les salons existants.</p>
         </Section>
 
         <Section title="Pour des besoins critiques">

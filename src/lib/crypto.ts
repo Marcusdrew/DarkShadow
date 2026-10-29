@@ -7,8 +7,9 @@
  * - The server only sees a PUBLIC room id = truncated SHA-256 of the secret (one-way),
  *   formatted as a UUID. It cannot recover the secret nor derive the key.
  * - The AES-GCM key is derived (PBKDF2) from the secret and a per-room salt.
- * - Each participant generates an ECDSA keypair for a display fingerprint. Messages are
- *   NOT signed: pseudos/fingerprints are not authenticated (see /about).
+ * - Each participant generates an ECDSA P-256 keypair. fingerprint = SHA-256(pubkey)[0..16 hex].
+ *   Every message is signed; clients drop messages whose signature or fingerprint is invalid,
+ *   and pseudos are always re-derived from the fingerprint (never trusted from the network).
  */
 
 const enc = new TextEncoder();
@@ -130,12 +131,18 @@ export async function roomFingerprint(secret: string): Promise<string> {
   return toHex(h).slice(0, 16);
 }
 
-/** Generate an ECDSA identity keypair (P-256). */
+/** Fingerprint of a raw P-256 public key: first 16 hex chars of SHA-256. */
+export async function fingerprintOfPubkey(pubkeyB64: string): Promise<string> {
+  return toHex(await sha256(fromB64(pubkeyB64))).slice(0, 16);
+}
+
+/** Generate an ECDSA identity keypair (P-256). The private key is exported as JWK so the
+ *  identity survives a reload within the same tab (sessionStorage), like before. */
 export async function generateIdentity(): Promise<{
   pubkeyB64: string;
   fingerprint: string;
+  privJwk: JsonWebKey;
   privKey: CryptoKey;
-  pubKey: CryptoKey;
 }> {
   const kp = await crypto.subtle.generateKey(
     { name: "ECDSA", namedCurve: "P-256" },
@@ -144,13 +151,68 @@ export async function generateIdentity(): Promise<{
   );
   const raw = await crypto.subtle.exportKey("raw", kp.publicKey);
   const pubkeyB64 = toB64(raw);
-  const fp = await sha256(new Uint8Array(raw as ArrayBuffer));
+  const privJwk = await crypto.subtle.exportKey("jwk", kp.privateKey);
   return {
     pubkeyB64,
-    fingerprint: toHex(fp).slice(0, 16),
+    fingerprint: await fingerprintOfPubkey(pubkeyB64),
+    privJwk,
     privKey: kp.privateKey,
-    pubKey: kp.publicKey,
   };
+}
+
+export async function importPrivateKey(jwk: JsonWebKey): Promise<CryptoKey> {
+  return crypto.subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+}
+
+function signedPayload(roomId: string, iv: string, ciphertext: string): Uint8Array {
+  return enc.encode(`cipherroom:msg:v1|${roomId}|${iv}|${ciphertext}`);
+}
+
+/** Sign a message (binds it to the room, its IV and its ciphertext). */
+export async function signMessage(
+  privKey: CryptoKey,
+  roomId: string,
+  iv: string,
+  ciphertext: string,
+): Promise<string> {
+  const sig = await crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" },
+    privKey,
+    signedPayload(roomId, iv, ciphertext) as BufferSource,
+  );
+  return toB64(sig);
+}
+
+/**
+ * Verify that a message was signed by the owner of `fingerprint`: the public key must hash to
+ * the fingerprint, and the signature must be valid for this room, IV and ciphertext.
+ */
+export async function verifyMessage(
+  roomId: string,
+  fingerprint: string,
+  pubkeyB64: string,
+  iv: string,
+  ciphertext: string,
+  signatureB64: string,
+): Promise<boolean> {
+  try {
+    if ((await fingerprintOfPubkey(pubkeyB64)) !== fingerprint) return false;
+    const pub = await crypto.subtle.importKey(
+      "raw",
+      fromB64(pubkeyB64) as BufferSource,
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["verify"],
+    );
+    return await crypto.subtle.verify(
+      { name: "ECDSA", hash: "SHA-256" },
+      pub,
+      fromB64(signatureB64) as BufferSource,
+      signedPayload(roomId, iv, ciphertext) as BufferSource,
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Stylish pseudonym from fingerprint. */

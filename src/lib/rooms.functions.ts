@@ -33,7 +33,11 @@ export const createRoom = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const { verifyTurnstileToken } = await import("./turnstile.server");
-    if (!(await verifyTurnstileToken(data.token))) {
+    const { getRequest } = await import("@tanstack/react-start/server");
+    const headers = getRequest()?.headers;
+    const remoteIp =
+      headers?.get("x-real-ip") ?? headers?.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+    if (!(await verifyTurnstileToken(data.token, remoteIp))) {
       return { ok: false as const, error: "captcha_failed" };
     }
     const { generateRoomSaltServer } = await import("./rooms.server");
