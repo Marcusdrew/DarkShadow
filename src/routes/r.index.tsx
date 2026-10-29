@@ -18,6 +18,9 @@ import {
   roomFingerprint as computeRoomFp,
   roomPublicId,
   isValidRoomSecret,
+  signMessage,
+  verifyMessage,
+  pseudoFromFingerprint,
 } from "@/lib/crypto";
 import { getIdentity, wipeIdentity } from "@/lib/identity";
 import type { Identity } from "@/lib/identity";
@@ -68,6 +71,9 @@ interface SystemEntry {
 }
 
 const SHIELD_HOLD_MS = 3200;
+const ROOM_SECRET_KEY = "cipherroom:room-secret";
+/** Plaintext limit so the ciphertext stays under the database limit (16 000 base64 chars). */
+const MAX_MESSAGE_CHARS = 4000;
 const SCREENSHOT_KEYS = new Set([
   "PrintScreen",
   "F13",
@@ -123,8 +129,10 @@ function RoomPage() {
   const shieldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shieldLocked = useRef(false);
   const joinedRef = useRef(false);
+  const knownParticipants = useRef<Set<string>>(new Set());
 
-  // Identity + key
+  // Room secret: read it from the URL fragment once, then remove it from the address bar and
+  // browser history (history sync, shared devices) and keep it in this tab's sessionStorage only.
   useEffect(() => {
     const read = () => {
       const raw = window.location.hash.replace(/^#/, "").trim();
@@ -134,7 +142,23 @@ function RoomPage() {
       } catch {
         decoded = "";
       }
-      setSecret(isValidRoomSecret(decoded) ? decoded : null);
+      let found: string | null = isValidRoomSecret(decoded) ? decoded : null;
+      if (found) {
+        try {
+          sessionStorage.setItem(ROOM_SECRET_KEY, found);
+        } catch {
+          /* storage unavailable: secret stays in memory only */
+        }
+      } else if (!raw) {
+        try {
+          const stored = sessionStorage.getItem(ROOM_SECRET_KEY);
+          if (stored && isValidRoomSecret(stored)) found = stored;
+        } catch {
+          /* ignore */
+        }
+      }
+      if (raw) window.history.replaceState(window.history.state, "", window.location.pathname);
+      setSecret(found);
       setHashChecked(true);
     };
     read();
@@ -173,18 +197,18 @@ function RoomPage() {
     if (!roomId || !secret) return;
     let mounted = true;
     (async () => {
-      const { data, error } = await supabase
-        .from("rooms")
-        .select("expires_at, message_ttl_seconds, fingerprint, max_participants, salt")
-        .eq("id", roomId)
-        .maybeSingle();
+      const { data: rows, error } = await supabase.rpc("cr_get_room", { p_room: roomId });
+      const data = rows?.[0];
       if (error || !data || new Date(data.expires_at).getTime() <= Date.now()) {
         nav({ to: "/r/expired" });
         return;
       }
       const expectedFp = await computeRoomFp(secret);
       if (data.fingerprint !== expectedFp) {
-        toast.error("Empreinte du salon invalide");
+        // The server returned metadata that does not belong to this secret: never continue.
+        toast.error("Empreinte du salon invalide — canal refusé");
+        nav({ to: "/r/expired" });
+        return;
       }
       if (!data.salt) {
         nav({ to: "/r/expired" });
@@ -269,23 +293,13 @@ function RoomPage() {
     pushLog(`▸ session ${identity.pseudo} (fp ${identity.fingerprint.slice(0, 8)})`);
 
     const init = async () => {
-      // Insert d'abord ; si le participant existe déjà (retour dans le canal),
-      // on ne met à jour que last_seen_at (les autres colonnes sont immuables).
-      let { error: joinError } = await supabase.from("room_participants").insert({
-        room_id: roomId,
-        fingerprint: identity.fingerprint,
-        pseudo: identity.pseudo,
-        pubkey: identity.pubkeyB64,
-        last_seen_at: new Date().toISOString(),
+      // Join (or re-join) through the server function, which checks fingerprint = hash(pubkey).
+      const { error: joinError } = await supabase.rpc("cr_join_room", {
+        p_room: roomId,
+        p_fingerprint: identity.fingerprint,
+        p_pseudo: identity.pseudo,
+        p_pubkey: identity.pubkeyB64,
       });
-      if (joinError && joinError.code === "23505") {
-        const { error: touchError } = await supabase
-          .from("room_participants")
-          .update({ last_seen_at: new Date().toISOString() })
-          .eq("room_id", roomId)
-          .eq("fingerprint", identity.fingerprint);
-        joinError = touchError ?? null;
-      }
       if (joinError) {
         const message = joinError.message.toLowerCase();
         if (message.includes("room_participant_limit_reached")) {
@@ -302,105 +316,95 @@ function RoomPage() {
       }
       joinedRef.current = true;
 
-      const { data: pData } = await supabase
-        .from("room_participants")
-        .select("fingerprint, pseudo, joined_at")
-        .eq("room_id", roomId)
-        .order("joined_at", { ascending: true });
-      if (!cancelled && pData) setParticipants(pData as Participant[]);
+      await refreshParticipants();
 
-      const { data: mData } = await supabase
-        .from("messages")
-        .select(
-          "id, sender_pseudo, sender_fingerprint, ciphertext, iv, created_at, expires_at",
-        )
-        .eq("room_id", roomId)
-        .order("created_at", { ascending: true });
+      const { data: mData } = await supabase.rpc("cr_list_messages", { p_room: roomId });
       if (mData && !cancelled) {
         const decrypted: Msg[] = [];
         for (const m of mData) {
-          try {
-            const text = await decryptMessage(keyReady, m.ciphertext, m.iv);
+          const msg = await openMessage(m, false);
+          if (msg) {
             seenIds.current.add(m.id);
-            decrypted.push({
-              id: m.id,
-              pseudo: m.sender_pseudo,
-              fingerprint: m.sender_fingerprint,
-              text,
-              createdAt: new Date(m.created_at).getTime(),
-              expiresAt: m.expires_at ? new Date(m.expires_at).getTime() : null,
-              fresh: false,
-            });
-          } catch { /* ignore */ }
+            decrypted.push(msg);
+          }
         }
         if (!cancelled) setMessages(decrypted);
+      }
+    };
+
+    // Participants are always re-read from the server: a broadcast is only a hint.
+    const refreshParticipants = async () => {
+      const { data: pData } = await supabase.rpc("cr_list_participants", { p_room: roomId });
+      if (cancelled || !pData) return;
+      const next = pData.map((p) => ({
+        fingerprint: p.fingerprint,
+        pseudo: pseudoFromFingerprint(p.fingerprint),
+        joined_at: p.joined_at,
+      }));
+      const known = knownParticipants.current;
+      for (const p of next) {
+        if (known.size > 0 && !known.has(p.fingerprint) && p.fingerprint !== identity.fingerprint) {
+          pushLog(`▸ ${p.pseudo} a rejoint le canal`, "ok");
+          pingSound();
+        }
+      }
+      knownParticipants.current = new Set(next.map((p) => p.fingerprint));
+      setParticipants(next);
+    };
+
+    // Verify the signature (fingerprint = hash(pubkey), signed room+iv+ciphertext), then decrypt.
+    // Anything that fails is dropped silently: it was not written by a room participant.
+    const openMessage = async (
+      m: {
+        id: string;
+        sender_fingerprint: string;
+        sender_pubkey: string;
+        ciphertext: string;
+        iv: string;
+        signature: string;
+        created_at: string;
+        expires_at: string | null;
+      },
+      fresh: boolean,
+    ): Promise<Msg | null> => {
+      if (!m || typeof m.id !== "string" || typeof m.ciphertext !== "string") return null;
+      const ok = await verifyMessage(roomId, m.sender_fingerprint, m.sender_pubkey, m.iv, m.ciphertext, m.signature);
+      if (!ok) return null;
+      try {
+        const text = await decryptMessage(keyReady, m.ciphertext, m.iv);
+        return {
+          id: m.id,
+          pseudo: pseudoFromFingerprint(m.sender_fingerprint),
+          fingerprint: m.sender_fingerprint,
+          text,
+          createdAt: new Date(m.created_at).getTime(),
+          expiresAt: m.expires_at ? new Date(m.expires_at).getTime() : null,
+          fresh,
+        };
+      } catch {
+        return null;
       }
     };
     init();
 
     const channel = supabase
       .channel(`room:${roomId}`, { config: { broadcast: { self: false } } })
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `room_id=eq.${roomId}`,
-        },
-        async (payload) => {
-          if (!joinedRef.current) return;
-          const m = payload.new as {
-            id: string;
-            sender_pseudo: string;
-            sender_fingerprint: string;
-            ciphertext: string;
-            iv: string;
-            created_at: string;
-            expires_at: string | null;
-          };
-          if (seenIds.current.has(m.id)) return;
-          seenIds.current.add(m.id);
-          try {
-            const text = await decryptMessage(keyReady, m.ciphertext, m.iv);
-            const isMine = m.sender_fingerprint === identity.fingerprint;
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: m.id,
-                pseudo: m.sender_pseudo,
-                fingerprint: m.sender_fingerprint,
-                text,
-                createdAt: new Date(m.created_at).getTime(),
-                expiresAt: m.expires_at ? new Date(m.expires_at).getTime() : null,
-                fresh: !isMine,
-              },
-            ]);
-            pulse();
-            if (!isMine) pingSound();
-          } catch { /* ignore */ }
-        },
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "room_participants",
-          filter: `room_id=eq.${roomId}`,
-        },
-        (payload) => {
-          if (!joinedRef.current) return;
-          const p = payload.new as Participant;
-          setParticipants((prev) =>
-            prev.some((x) => x.fingerprint === p.fingerprint) ? prev : [...prev, p],
-          );
-          if (p.fingerprint !== identity.fingerprint) {
-            pushLog(`▸ ${p.pseudo} a rejoint le canal`, "ok");
-            pingSound();
-          }
-        },
-      )
+      .on("broadcast", { event: "message" }, async (payload) => {
+        if (!joinedRef.current) return;
+        const m = payload.payload as Parameters<typeof openMessage>[0];
+        if (!m?.id || seenIds.current.has(m.id)) return;
+        const isMine = m.sender_fingerprint === identity.fingerprint;
+        const msg = await openMessage(m, !isMine);
+        if (!msg || seenIds.current.has(m.id)) return;
+        seenIds.current.add(m.id);
+        setMessages((prev) => [...prev, msg]);
+        pulse();
+        if (!isMine) pingSound();
+      })
+      .on("broadcast", { event: "participant" }, () => {
+        if (!joinedRef.current) return;
+        void refreshParticipants();
+      })
       .on("broadcast", { event: "typing" }, (payload) => {
         if (!joinedRef.current) return;
         const fp = (payload.payload as { fp?: string })?.fp;
@@ -416,24 +420,31 @@ function RoomPage() {
         };
         if (!event.fp || event.fp === identity.fingerprint) return;
         if (event.type === "room_expired") {
-          setRoomClosedReason("expired");
-          setMessages([]);
-          setInput("");
-          toast("⏱ Le canal a expiré", { description: "Tous les messages ont été dissipés." });
-          nav({ to: "/r/expired" });
+          // Any peer can send this event: only close if the server confirms it.
+          void (async () => {
+            const { data } = await supabase.rpc("cr_get_room", { p_room: roomId });
+            if (!data?.[0] || new Date(data[0].expires_at).getTime() <= Date.now()) {
+              setRoomClosedReason("expired");
+              setMessages([]);
+              setInput("");
+              toast("⏱ Le canal a expiré", { description: "Tous les messages ont été dissipés." });
+              nav({ to: "/r/expired" });
+            }
+          })();
           return;
         }
+        const who = /^[0-9a-f]{16}$/.test(event.fp) ? pseudoFromFingerprint(event.fp) : "un poste";
         if (event.type === "capture") {
-          pushLog(`⚠ protection activée chez ${event.pseudo ?? "un poste"} (capture possible)`, "warn");
+          pushLog(`⚠ protection activée chez ${who} (capture possible)`, "warn");
           alertSound();
           return;
         }
         if (event.type === "hidden" || event.type === "pagehide") {
-          pushLog(`⚠ ${event.pseudo ?? "un poste"} a quitté la fenêtre`, "warn");
+          pushLog(`⚠ ${who} a quitté la fenêtre`, "warn");
           alertSound();
           return;
         }
-        if (event.type === "visible") pushLog(`▸ ${event.pseudo ?? "un poste"} est revenu`, "info");
+        if (event.type === "visible") pushLog(`▸ ${who} est revenu`, "info");
       })
       .subscribe();
 
@@ -481,12 +492,9 @@ function RoomPage() {
       nav({ to: "/r/expired" });
     };
     const verifyStillOpen = async () => {
-      const { data } = await supabase
-        .from("rooms")
-        .select("expires_at")
-        .eq("id", roomId)
-        .maybeSingle();
-      if (!data || new Date(data.expires_at).getTime() <= Date.now()) closeRoom();
+      const { data, error } = await supabase.rpc("cr_get_room", { p_room: roomId });
+      if (error) return; // transient network error: retry on the next tick
+      if (!data?.[0] || new Date(data[0].expires_at).getTime() <= Date.now()) closeRoom();
     };
     if (expireAt <= Date.now()) {
       closeRoom();
@@ -658,20 +666,42 @@ function RoomPage() {
     pulse();
     clickSound();
     try {
+      if (text.length > MAX_MESSAGE_CHARS) {
+        toast.error("Message trop long");
+        setInput(text);
+        return;
+      }
       const { ciphertext, iv } = await encryptMessage(keyReady, text);
-      const expiresAt =
-        room.message_ttl_seconds > 0
-          ? new Date(Date.now() + room.message_ttl_seconds * 1000).toISOString()
-          : null;
-      const { error } = await supabase.from("messages").insert({
-        room_id: roomId,
-        sender_fingerprint: identity.fingerprint,
-        sender_pseudo: identity.pseudo,
-        ciphertext,
-        iv,
-        expires_at: expiresAt,
+      const signature = await signMessage(identity.privKey, roomId, iv, ciphertext);
+      // The server sets the timestamps and the expiry from the room's TTL, then broadcasts.
+      const { data: posted, error } = await supabase.rpc("cr_post_message", {
+        p_room: roomId,
+        p_fingerprint: identity.fingerprint,
+        p_ciphertext: ciphertext,
+        p_iv: iv,
+        p_signature: signature,
       });
-      if (error) throw error;
+      if (error) {
+        if (error.message.includes("rate_limited")) toast.error("Trop de messages — patientez quelques secondes");
+        throw error;
+      }
+      // Show our own message right away (the DB broadcast is deduplicated by id).
+      const row = posted?.[0];
+      if (row && !seenIds.current.has(row.id)) {
+        seenIds.current.add(row.id);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: row.id,
+            pseudo: identity.pseudo,
+            fingerprint: identity.fingerprint,
+            text,
+            createdAt: new Date(row.created_at).getTime(),
+            expiresAt: row.expires_at ? new Date(row.expires_at).getTime() : null,
+            fresh: false,
+          },
+        ]);
+      }
     } catch (e) {
       console.error(e);
       toast.error("Échec de l'envoi");
@@ -911,6 +941,7 @@ function RoomPage() {
             <div className="flex gap-2 items-end">
               <textarea
                 aria-label="Message"
+                maxLength={MAX_MESSAGE_CHARS}
                 ref={inputRef}
                 value={input}
                 onChange={(e) => onInputChange(e.target.value)}

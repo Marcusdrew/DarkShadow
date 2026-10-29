@@ -59,6 +59,7 @@ export function Turnstile({
         if (cancelled || !ref.current || !window.turnstile) return;
         widgetId.current = window.turnstile.render(ref.current, {
           sitekey: TURNSTILE_SITE_KEY,
+          action: "create_room",
           appearance: "interaction-only",
           size: "flexible",
           callback: (token: string) => cb.current(token),
