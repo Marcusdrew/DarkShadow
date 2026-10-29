@@ -66,9 +66,8 @@ function AboutPage() {
             Le canal surveille les raccourcis clavier de capture connus (Impr. écran,
             Win+Maj+S, Cmd+Maj+3/4/5), la perte de focus de la fenêtre et les demandes
             d'impression. Sur mobile (Android, iOS) il surveille en plus les gestes à trois
-             doigts, certains changements de zone visible et la mise en arrière-plan de
-             l'onglet. Ce sont des signaux préventifs, pas des preuves de capture : un
-             changement d'orientation peut aussi déclencher le masque. Le contenu est
+             doigts et la mise en arrière-plan de l'onglet. L'ouverture du clavier ne
+             déclenche pas le masque. Ce sont des signaux préventifs, pas des preuves de capture. Le contenu est
              masqué et une alerte de protection est partagée. Après une interruption,
              le retour à l'application ne révèle pas automatiquement la conversation :
              une reprise explicite est nécessaire. Un bouton bouclier permet aussi

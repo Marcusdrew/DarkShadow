@@ -337,7 +337,7 @@ function RoomPage() {
     const refreshParticipants = async () => {
       const { data: pData } = await supabase.rpc("cr_list_participants", { p_room: roomId });
       if (cancelled || !pData) return;
-      const next = pData.map((p) => ({
+      const next = (pData as Array<{ fingerprint: string; joined_at: string }>).map((p) => ({
         fingerprint: p.fingerprint,
         pseudo: pseudoFromFingerprint(p.fingerprint),
         joined_at: p.joined_at,
@@ -349,7 +349,7 @@ function RoomPage() {
           pingSound();
         }
       }
-      knownParticipants.current = new Set(next.map((p) => p.fingerprint));
+      knownParticipants.current = new Set(next.map((p: Participant) => p.fingerprint));
       setParticipants(next);
     };
 
