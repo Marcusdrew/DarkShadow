@@ -1,12 +1,13 @@
 // Client navigateur vers le projet Supabase externe de CipherRoom.
 // La clé anon est publique par conception (protégée par les politiques RLS).
 import { createClient } from "@supabase/supabase-js";
+import type { ExternalDatabase } from "./external.types";
 
 const EXTERNAL_SUPABASE_URL = "https://ydietqhwvolrofznupxt.supabase.co";
 const EXTERNAL_SUPABASE_ANON_KEY = "sb_publishable_LdX8ey871vACpkcP3ZWIUQ_6neP9VBJ";
 
 function createExternalClient() {
-  return createClient(EXTERNAL_SUPABASE_URL, EXTERNAL_SUPABASE_ANON_KEY, {
+  return createClient<ExternalDatabase>(EXTERNAL_SUPABASE_URL, EXTERNAL_SUPABASE_ANON_KEY, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
